@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<title>CSIRT: Card Defense (Prototype)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
+<style>
+  body { margin:0; background:#111; color:#eee; font-family: "Noto Sans JP", sans-serif; }
+  #game-container { width:100%; height:100vh; overflow:hidden; }
+  .small { font-size:12px; }
+</style>
+</head>
+<body>
+<div id="game-container"></div>
+
+<script>
+/*
+  CSIRT Card Game - Phaser prototype
+  - One-file Phaser 3 game implementing main flows from the spec.
+  - Triple-energy system: gold (money), labor (people), time
+  - Scenes: Opening, Map, Battle, Reward, Chest, Rest, Shop, Event, GameOver
+  - Simplified UI using Phaser text & rectangles
+*/
+
+/* ---------- Utility ---------- */
+const Util = {
+  randChoice(arr){ return arr[Math.floor(Math.random()*arr.length)]; },
+  shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]] } return arr; },
+  clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+};
+
+/* ---------- Game Data Templates ---------- */
+
+// Sample Cards (costs: money, labor, time)
+const CARD_TEMPLATES = [
+  { id:'fw', name:'Firewall Deployment', cost:{money:1,labor:1,time:0}, defense:8, text:'防御+8 (network)', synergy:'network' },
+  { id:'patch', name:'Apply Patch', cost:{money:0,labor:1,time:1}, damageToVuln:12, text:'脆弱性悪用を阻止(ダメージ12)', synergy:'vuln' },
+  { id:'backup', name:'Offsite Backup', cost:{money:2,labor:0,time:1}, heal:10, text:'資産回復+10', synergy:'backup' },
+  { id:'monitor', name:'IDS Monitoring', cost:{money:1,labor:0,time:1}, draw:1, text:'カードドロー1', synergy:'network' },
+  { id:'train', name:'Employee Training', cost:{money:0,labor:2,time:0}, buffDefense:4, text:'次ターン防御+4 (human)', synergy:'human' },
+  { id:'audit', name:'Security Audit', cost:{money:1,labor:1,time:1}, debuffEnemy:2, text:'敵防御-2 (policy)', synergy:'policy' }
+];
+
+// Enemy templates (concept + ATT&CK-like theme)
+const ENEMY_TEMPLATES = {
+  normal:[
+    {id:'vuln_exploit', name:'脆弱性スキャナ', hp:30, def:0, intent:'attack', intentValue:6, tags:['vuln']},
+    {id:'phisher', name:'ソーシャルエンジニア', hp:28, def:0, intent:'attack', intentValue:5, tags:['human']},
+    {id:'worm', name:'マルウェア配送', hp:32, def:2, intent:'attack', intentValue:7, tags:['malware']},
+  ],
+  elite:[
+    {id:'apt_probe', name:'APT 偵察', hp:55, def:3, intent:'attack', intentValue:10, tags:['recon']},
+    {id:'supply_chain', name:'サプライチェーン', hp:60, def:4, intent:'attack', intentValue:12, tags:['supply']},
+  ],
+  boss:[
+    {id:'zero_day', name:'ゼロデイ攻撃者', hp:120, def:6, intent:'attack', intentValue:18, tags:['vuln','remote']},
+  ]
+};
+
+// Relic templates
+const RELIC_TEMPLATES = [
+  {id:'inc_budget', name:'予算増額', desc:'金銭エナジーの最大値+1', effect:(player)=>{player.maxEnergy.money++; player.energy.money++;}},
+  {id:'team_hire', name:'臨時要員', desc:'労働力最大+1', effect:(player)=>{player.maxEnergy.labor++; player.energy.labor++;}},
+  {id:'automation', name:'自動化ツール', desc:'時間エナジー最大+1', effect:(player)=>{player.maxEnergy.time++; player.energy.time++;}},
+  {id:'network_expert', name:'ネットワーク専門家', desc:'networkシナジーカードの防御効果+50%', effect:null},
+];
+
+/* ---------- Game State (persistent across scenes during one run) ---------- */
+class RunState {
+  constructor(){
+    this.resetAll();
+  }
+  resetAll(){
+    this.stageIndex = 0;
+    this.map = []; // will be array of nodes
+    // Player base stats / resources
+    this.player = {
+      maxHp: 100,
+      hp: 100,
+      defense: 0,
+      // triple-energy
+      maxEnergy: {money:3, labor:3, time:3},
+      energy: {money:3, labor:3, time:3},
+      relics: [],
+      deck: [],
+      discard: [],
+      drawPile: []
+    };
+    // gold -> money resource used for shops but also energy
+    this.gold = 10;
+    // store all-owned relic ids
+    this.relicIds = new Set();
+    this.playTime = 0;
+    this.startTimestamp = Date.now();
+  }
+  applyRelic(relic){
+    if(this.relicIds.has(relic.id)) return;
+    this.relicIds.add(relic.id);
+    this.player.relics.push(relic);
+    if(relic.effect) relic.effect(this.player);
+  }
+}
+
+const RUN = new RunState();
+
+/* ---------- Phaser Config ---------- */
+const config = {
+  type: Phaser.AUTO,
+  width: 1200,
+  height: 720,
+  parent: 'game-container',
+  backgroundColor: '#1a1a1a',
+  scene: []
+};
+
+/* ---------- Scenes ---------- */
+
+/* OpeningScene */
+class OpeningScene extends Phaser.Scene {
+  constructor(){ super({key:'OpeningScene'}); }
+  create(){
+    RUN.resetAll();
+    this.add.text(600,120,'CSIRT: Card Defense', {fontSize:36}).setOrigin(0.5);
+    this.add.text(600,180,'あなたは中小企業の新米CSIRT。一定期間を守り切れ！', {fontSize:20}).setOrigin(0.5);
+    const startBtn = this.add.rectangle(600,360,300,70,0x2d8cff).setInteractive();
+    const startText = this.add.text(600,360,'ゲーム開始', {fontSize:24}).setOrigin(0.5);
+    startBtn.on('pointerdown', ()=>{
+      // prepare starting deck
+      RUN.player.deck = [];
+      // start with basic cards
+      for(let i=0;i<4;i++) RUN.player.deck.push(JSON.parse(JSON.stringify(CARD_TEMPLATES[0]))); // firewall
+      for(let i=0;i<4;i++) RUN.player.deck.push(JSON.parse(JSON.stringify(CARD_TEMPLATES[1]))); // patch
+      RUN.player.deck.push(JSON.parse(JSON.stringify(CARD_TEMPLATES[3]))); // monitor
+      // shuffle and init map
+      RUN.player.discard = [];
+      RUN.player.drawPile = Util.shuffle(RUN.player.deck.slice());
+      this.scene.start('MapScene');
+    });
+    // show sample run info
+    this.add.text(60,560,'仕様メモ（プロトタイプ）', {fontSize:14});
+    this.add.text(60,590,'- 3種類エナジー: 金銭/労働力/時間', {fontSize:12});
+    this.add.text(60,610,'- 10ステージ マップ生成 -> 選択 -> イベント/敵/休憩等', {fontSize:12});
+  }
+}
+
+/* MapScene */
+class MapScene extends Phaser.Scene {
+  constructor(){ super({key:'MapScene'}); }
+  create(){
+    this.cameras.main.setBackgroundColor('#121212');
+    this.add.text(30,20,'マップ', {fontSize:28});
+    // If map not generated, generate
+    if(RUN.map.length===0) this.generateMap();
+    this.drawMap();
+    this.add.text(30,600,`金銭: ${RUN.gold}    HP: ${RUN.player.hp}/${RUN.player.maxHp}`, {fontSize:18});
+    this.add.text(300,600,`Relics: ${RUN.player.relics.map(r=>r.name).join(', ')||'なし'}`, {fontSize:14});
+  }
+
+  generateMap(){
+    // 10 stages: index 1..10 (we store 0..9)
+    const nodes = [];
+    for(let i=0;i<10;i++){
+      let kind = 'enemy';
+      if(i===0) kind='enemy';
+      else if(i===9) kind='boss';
+      else if(i>=5) {
+        // 6-9 random from elite, rest, chest, shop, event
+        kind = Util.randChoice(['elite','rest','chest','shop','event']);
+      } else {
+        kind = Util.randChoice(['enemy','rest','chest','shop','event']);
+      }
+      nodes.push({index:i+1, kind:kind, chosen:false});
+    }
+    RUN.map = nodes;
+  }
+
+  drawMap(){
+    const baseX = 100;
+    const gapX = 100;
+    const y = 200;
+    // show nodes in a row; if too many, allow paging (simple)
+    const viewStart = 0;
+    for(let i=0;i<RUN.map.length;i++){
+      const node = RUN.map[i];
+      const x = baseX + i*90;
+      const rect = this.add.rectangle(x, y, 80, 80, node.chosen?0x4444ff:0x333333).setStrokeStyle(2, 0xffffff).setInteractive();
+      const t = this.add.text(x, y-8, `${node.index}`, {fontSize:16}).setOrigin(0.5);
+      const k = this.add.text(x, y+12, `${node.kind}`, {fontSize:12}).setOrigin(0.5);
+      rect.on('pointerdown', ()=>{
+        if(node.chosen) return; // already passed
+        node.chosen = true;
+        RUN.stageIndex = node.index;
+        // go to correct scene
+        if(node.kind==='enemy') this.startBattle(false);
+        else if(node.kind==='elite') this.startBattle(true);
+        else if(node.kind==='boss') this.startBattle('boss');
+        else if(node.kind==='rest') this.scene.start('RestScene');
+        else if(node.kind==='chest') this.scene.start('ChestScene');
+        else if(node.kind==='shop') this.scene.start('ShopScene');
+        else if(node.kind==='event') this.scene.start('EventScene');
+      });
+    }
+    // legend
+    this.add.text(900,50,'伝説: 敵/エリート/ボス/休憩/宝箱/ショップ/イベント', {fontSize:12});
+    this.add.text(900,80,'青が選択済', {fontSize:12}).setColor('#88f');
+    // show remaining count
+    const remaining = RUN.map.filter(n=>!n.chosen).length;
+    this.add.text(900,110,`残りステージ: ${remaining}`, {fontSize:14});
+    // show deck button -> view deck
+    const deckBtn = this.add.rectangle(900,150,200,40,0x2dcc70).setInteractive();
+    this.add.text(900,150,'デッキを見る', {fontSize:16}).setOrigin(0.5);
+    deckBtn.on('pointerdown', ()=>{
+      // simple deck modal using text
+      let y = 200;
+      const modal = this.add.rectangle(600,360,700,420,0x000000,0.8).setDepth(10);
+      const close = this.add.rectangle(600,620,100,40,0xff7777).setInteractive().setDepth(11);
+      const closeText = this.add.text(600,620,'閉じる',{fontSize:16}).setOrigin(0.5).setDepth(11);
+      const deckTxt = this.add.text(300,240,`デッキ:\n${RUN.player.deck.map(c=>c.name).join('\n')}\n\n所持レリック:\n${RUN.player.relics.map(r=>r.name).join(', ')||'なし'}`, {fontSize:14}).setDepth(11);
+      close.on('pointerdown', ()=>{ modal.destroy(); close.destroy(); closeText.destroy(); deckTxt.destroy(); });
+    });
+  }
+
+  startBattle(eliteFlag){
+    // prepare enemy from templates based on type & stage
+    let enemy;
+    if(eliteFlag==='boss') enemy = JSON.parse(JSON.stringify(Util.randChoice(ENEMY_TEMPLATES.boss)));
+    else if(eliteFlag===true) enemy = JSON.parse(JSON.stringify(Util.randChoice(ENEMY_TEMPLATES.elite)));
+    else enemy = JSON.parse(JSON.stringify(Util.randChoice(ENEMY_TEMPLATES.normal)));
+    // store battle state in RUN
+    RUN.currentEnemy = {
+      ...enemy,
+      hp: enemy.hp,
+      def: enemy.def,
+      intent: enemy.intent,
+      intentValue: enemy.intentValue,
+      tags: enemy.tags || []
+    };
+    // prepare player draw pile if empty
+    if(RUN.player.drawPile.length===0) RUN.player.drawPile = Util.shuffle(RUN.player.deck.slice());
+    // reset temporary player values
+    RUN.player.defense = 0;
+    RUN.player.energy = {money:RUN.player.maxEnergy.money, labor:RUN.player.maxEnergy.labor, time:RUN.player.maxEnergy.time};
+    RUN.player.status = {}; // status effects
+    this.scene.start('BattleScene', {elite: eliteFlag});
+  }
+}
+
+/* BattleScene */
+class BattleScene extends Phaser.Scene {
+  constructor(){ super({key:'BattleScene'}); }
+  init(data){
+    this.elite = data.elite;
+  }
+  create(){
+    this.turn = 'player';
+    this.messageText = this.add.text(600,40,'', {fontSize:18}).setOrigin(0.5);
+    // Display player info area
+    this.playerInfo = this.add.text(30,30,this.formatPlayer(), {fontSize:16});
+    // Enemy info
+    this.enemyInfo = this.add.text(880,30,this.formatEnemy(), {fontSize:16});
+    // card area
+    this.cardGroup = this.add.group();
+    // utility buttons
+    const endBtn = this.add.rectangle(600,630,140,50,0xff9933).setInteractive();
+    this.add.text(600,630,'ターン終了', {fontSize:18}).setOrigin(0.5);
+    endBtn.on('pointerdown', ()=> this.endTurn());
+    // draw and start
+    this.startPlayerTurn();
+  }
+
+  formatPlayer(){
+    const p = RUN.player;
+    return `プレイヤ HP:${p.hp}/${p.maxHp}  防御:${p.defense}\n金銭:${p.energy.money}/${p.maxEnergy.money} 労働:${p.energy.labor}/${p.maxEnergy.labor} 時間:${p.energy.time}/${p.maxEnergy.time}\nゴールド:${RUN.gold}`;
+  }
+  formatEnemy(){
+    const e = RUN.currentEnemy;
+    return `敵: ${e.name}\nHP:${e.hp} DEF:${e.def}\n次: ${e.intent} ${e.intentValue}`;
+  }
+
+  startPlayerTurn(){
+    this.turn='player';
+    this.messageText.setText('あなたのターン');
+    // reset player defense to 0 per spec
+    RUN.player.defense = 0;
+    // recover energy to max
+    RUN.player.energy = {money:RUN.player.maxEnergy.money, labor:RUN.player.maxEnergy.labor, time:RUN.player.maxEnergy.time};
+    // draw 5 cards
+    this.hand = [];
+    for(let i=0;i<5;i++) this.drawCard();
+    this.renderHand();
+    this.updateInfo();
+  }
+
+  drawCard(){
+    if(RUN.player.drawPile.length===0){
+      // shuffle discard into draw if available
+      RUN.player.drawPile = Util.shuffle(RUN.player.discard.slice());
+      RUN.player.discard = [];
+    }
+    if(RUN.player.drawPile.length===0) return; // no cards
+    const card = RUN.player.drawPile.pop();
+    this.hand.push(card);
+  }
+
+  renderHand(){
+    // clear previous
+    this.cardGroup.clear(true,true);
+    const startX = 140;
+    const y = 480;
+    for(let i=0;i<this.hand.length;i++){
+      const card = this.hand[i];
+      const x = startX + i*200;
+      const box = this.add.rectangle(x,y,180,260,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
+      const title = this.add.text(x-70,y-100,card.name,{fontSize:14}).setOrigin(0);
+      const costText = `金${card.cost.money||0} 労${card.cost.labor||0} 時${card.cost.time||0}`;
+      const cost = this.add.text(x+60,y-100,costText,{fontSize:12}).setOrigin(1,0);
+      const body = this.add.text(x,y-20,card.text,{fontSize:12,wordWrap:{width:160}}).setOrigin(0.5);
+      this.cardGroup.addMultiple([box,title,cost,body]);
+      box.on('pointerdown', ()=> this.playCard(card, i));
+    }
+  }
+
+  playCard(card, index){
+    // check cost
+    const e = RUN.player.energy;
+    if((e.money < (card.cost.money||0)) || (e.labor < (card.cost.labor||0)) || (e.time < (card.cost.time||0))){
+      this.messageText.setText('コスト不足で使用できません');
+      return;
+    }
+    // pay cost
+    e.money -= (card.cost.money||0);
+    e.labor -= (card.cost.labor||0);
+    e.time -= (card.cost.time||0);
+    // apply effects (simplified)
+    // defense
+    if(card.defense){
+      let defGain = card.defense;
+      // relic synergy: network_expert doubles network synergy defense
+      if(card.synergy === 'network' && RUN.relicIds.has('network_expert')) defGain = Math.floor(defGain*1.5);
+      RUN.player.defense += defGain;
+    }
+    // damage to enemy
+    if(card.damageToVuln){
+      // check enemy def first
+      let dmg = card.damageToVuln;
+      // if enemy has defense reduce
+      const eDef = RUN.currentEnemy.def;
+      if(dmg <= eDef){
+        // reduce enemy def
+        RUN.currentEnemy.def -= dmg;
+      } else {
+        const over = dmg - RUN.currentEnemy.def;
+        RUN.currentEnemy.def = 0;
+        RUN.currentEnemy.hp -= over;
+      }
+    }
+    // heal
+    if(card.heal){
+      RUN.player.hp = Util.clamp(RUN.player.hp + card.heal, 0, RUN.player.maxHp);
+    }
+    // draw
+    if(card.draw){
+      for(let i=0;i<card.draw;i++) this.drawCard();
+    }
+    // buff enemy or debuff
+    if(card.debuffEnemy){
+      RUN.currentEnemy.def = Math.max(0, RUN.currentEnemy.def - card.debuffEnemy);
+    }
+    if(card.buffDefense){
+      RUN.player.defense += card.buffDefense;
+    }
+
+    // move card to discard
+    RUN.player.discard.push(card);
+    // remove from hand
+    this.hand.splice(index,1);
+    this.renderHand();
+    this.updateInfo();
+
+    // check enemy death
+    if(RUN.currentEnemy.hp <= 0){
+      this.onEnemyDefeated();
+    }
+  }
+
+  endTurn(){
+    // discard all hand
+    for(const c of this.hand) RUN.player.discard.push(c);
+    this.hand = [];
+    this.renderHand();
+    this.updateInfo();
+    // enemy turn
+    this.scene.pause();
+    this.enemyTurn();
+  }
+
+  enemyTurn(){
+    const e = RUN.currentEnemy;
+    // reset enemy defense to 0
+    e.def = Math.max(0, e.def);
+    // apply intent
+    this.messageText.setText(`敵のターン: ${e.name} が ${e.intent} を実行`);
+    if(e.intent === 'attack'){
+      let dmg = e.intentValue;
+      // check player defense
+      if(dmg <= RUN.player.defense){
+        RUN.player.defense -= dmg;
+      } else {
+        const over = dmg - RUN.player.defense;
+        RUN.player.defense = 0;
+        RUN.player.hp -= over;
+      }
+    }
+    // simulate enemy taking any DOT? (simplified) -> we'll deduct small decay
+    if(e.tags.includes('recon')){
+      // recon applies weak DOT to itself: simulate "time" reduces attacker persistence
+      e.hp -= 2;
+    }
+    // compute next intent (random small)
+    e.intentValue = Math.max(3, e.intentValue + Util.randChoice([-2,0,1]));
+    e.intent = Util.randChoice(['attack','attack','attack','weaken']); // bias attack
+    // if next is weaken, intentValue reduces player's max energy next turn? We'll show as hint
+    e.intentDisplay = e.intent;
+    // check player death
+    if(RUN.player.hp <= 0){
+      this.scene.start('GameOverScene');
+      return;
+    }
+    // after enemy turn, show updated info, delay and resume player
+    this.enemyInfo.setText(this.formatEnemy());
+    this.playerInfo.setText(this.formatPlayer());
+    this.time.delayedCall(1000, ()=> {
+      // proceed to next player turn
+      this.scene.resume();
+      // if enemy still alive, start player turn
+      if(RUN.currentEnemy.hp>0) this.startPlayerTurn();
+      else this.onEnemyDefeated();
+    });
+  }
+
+  updateInfo(){
+    this.playerInfo.setText(this.formatPlayer());
+    this.enemyInfo.setText(this.formatEnemy());
+  }
+
+  onEnemyDefeated(){
+    // reward for non-boss
+    const isBoss = (this.elite === 'boss');
+    if(isBoss){
+      // victory -> go to GameOver as win
+      RUN.playTime = (Date.now() - RUN.startTimestamp)/1000;
+      this.scene.start('GameOverScene', {victory:true});
+      return;
+    }
+    // grant gold: simple formula
+    const gained = Math.floor(10 + (this.elite?10:0) + Math.random()*10);
+    RUN.gold += gained;
+    // put remaining discard/draw into RUN.player.discard
+    RUN.player.discard = RUN.player.discard.concat(this.hand || []);
+    // clear currentEnemy
+    delete RUN.currentEnemy;
+    // go to reward scene
+    this.scene.start('RewardScene', {gold:gained});
+  }
+}
+
+/* RewardScene */
+class RewardScene extends Phaser.Scene {
+  constructor(){ super({key:'RewardScene'}); }
+  init(data){ this.gained = data.gold || 0; }
+  create(){
+    this.add.text(600,80,'戦闘勝利！ 報酬', {fontSize:26}).setOrigin(0.5);
+    this.add.text(600,120,`ゴールド +${this.gained}`, {fontSize:18}).setOrigin(0.5);
+    // show 3 random cards to choose from
+    const choices = Util.shuffle(CARD_TEMPLATES).slice(0,3).map(c => JSON.parse(JSON.stringify(c)));
+    this.add.text(200,200,'カードを選択してデッキに追加', {fontSize:18});
+    for(let i=0;i<choices.length;i++){
+      const c = choices[i];
+      const x = 200 + i*300;
+      const box = this.add.rectangle(x,300,240,140,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
+      this.add.text(x-100,260,c.name,{fontSize:14}).setOrigin(0);
+      this.add.text(x+100,260,`金${c.cost.money||0} 労${c.cost.labor||0} 時${c.cost.time||0}`,{fontSize:12}).setOrigin(1,0);
+      this.add.text(x,300,c.text,{fontSize:12,wordWrap:{width:200}}).setOrigin(0.5);
+      box.on('pointerdown', ()=>{
+        RUN.player.deck.push(c);
+        this.finishRewards();
+      });
+    }
+    // skip button
+    const skip = this.add.rectangle(600,520,160,50,0x666666).setInteractive();
+    this.add.text(600,520,'スキップ', {fontSize:18}).setOrigin(0.5);
+    skip.on('pointerdown', ()=> this.finishRewards());
+
+    // Next: relic selection (unowned)
+    this.relicChoices = Util.shuffle(RELIC_TEMPLATES.filter(r=>!RUN.relicIds.has(r.id))).slice(0,3);
+    this.relicTexts = [];
+    this.add.text(600,380,'レリックを1つ選択（またはスキップ）', {fontSize:18}).setOrigin(0.5);
+    for(let i=0;i<this.relicChoices.length;i++){
+      const r = this.relicChoices[i];
+      const x = 250 + i*300;
+      const box = this.add.rectangle(x,440,240,120,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
+      this.add.text(x-100,420,r.name,{fontSize:14}).setOrigin(0);
+      this.add.text(x,440,r.desc,{fontSize:12,wordWrap:{width:200}}).setOrigin(0.5);
+      box.on('pointerdown', ()=> {
+        RUN.applyRelic(r);
+        this.finishRewards();
+      });
+    }
+    // skip relic
+    const skipRel = this.add.rectangle(600,620,160,40,0x444444).setInteractive();
+    this.add.text(600,620,'レリックを取らない', {fontSize:14}).setOrigin(0.5);
+    skipRel.on('pointerdown', ()=> this.finishRewards());
+  }
+
+  finishRewards(){
+    this.scene.start('MapScene');
+  }
+}
+
+/* ChestScene */
+class ChestScene extends Phaser.Scene {
+  constructor(){ super({key:'ChestScene'}); }
+  create(){
+    this.add.text(600,120,'宝箱！', {fontSize:28}).setOrigin(0.5);
+    const goldGain = Math.floor(10 + Math.random()*30);
+    RUN.gold += goldGain;
+    this.add.text(600,180,`ゴールド +${goldGain}`, {fontSize:18}).setOrigin(0.5);
+    // relics choices
+    const relics = Util.shuffle(RELIC_TEMPLATES.filter(r=>!RUN.relicIds.has(r.id))).slice(0,3);
+    this.add.text(600,240,'レリックを1つ選択（またはスキップ）', {fontSize:18}).setOrigin(0.5);
+    for(let i=0;i<relics.length;i++){
+      const r = relics[i];
+      const x = 200 + i*300;
+      const box = this.add.rectangle(x,360,240,140,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
+      this.add.text(x-100,320,r.name,{fontSize:14}).setOrigin(0);
+      this.add.text(x,360,r.desc,{fontSize:12,wordWrap:{width:200}}).setOrigin(0.5);
+      box.on('pointerdown', ()=> {
+        RUN.applyRelic(r);
+        this.scene.start('MapScene');
+      });
+    }
+    const skip = this.add.rectangle(600,560,160,40,0x666666).setInteractive();
+    this.add.text(600,560,'スキップ', {fontSize:16}).setOrigin(0.5);
+    skip.on('pointerdown', ()=> this.scene.start('MapScene'));
+  }
+}
+
+/* RestScene */
+class RestScene extends Phaser.Scene {
+  constructor(){ super({key:'RestScene'}); }
+  create(){
+    this.add.text(600,120,'休憩', {fontSize:28}).setOrigin(0.5);
+    // three choices: rest(heal), upgrade(random card), skip
+    const restBtn = this.add.rectangle(300,320,240,100,0x77cc77).setInteractive();
+    this.add.text(300,320,'休息: 体力回復', {fontSize:18}).setOrigin(0.5);
+    restBtn.on('pointerdown', ()=> {
+      RUN.player.hp = Math.min(RUN.player.maxHp, RUN.player.hp + 20);
+      this.scene.start('MapScene');
+    });
+
+    const upgradeBtn = this.add.rectangle(600,320,240,100,0x7799ff).setInteractive();
+    this.add.text(600,320,'強化: デッキのカード強化', {fontSize:18}).setOrigin(0.5);
+    upgradeBtn.on('pointerdown', ()=> {
+      if(RUN.player.deck.length===0) { this.scene.start('MapScene'); return; }
+      const toUpgrade = Util.randChoice(RUN.player.deck);
+      // simple upgrade: increase defense/heal/damage by 50%
+      if(toUpgrade.defense) toUpgrade.defense = Math.ceil(toUpgrade.defense*1.5);
+      if(toUpgrade.heal) toUpgrade.heal = Math.ceil(toUpgrade.heal*1.5);
+      if(toUpgrade.damageToVuln) toUpgrade.damageToVuln = Math.ceil(toUpgrade.damageToVuln*1.5);
+      this.add.text(600,430,`${toUpgrade.name} を強化しました`, {fontSize:14});
+      this.time.delayedCall(1000, ()=> this.scene.start('MapScene'));
+    });
+
+    const skipBtn = this.add.rectangle(900,320,240,100,0x666666).setInteractive();
+    this.add.text(900,320,'スキップ', {fontSize:18}).setOrigin(0.5);
+    skipBtn.on('pointerdown', ()=> this.scene.start('MapScene'));
+  }
+}
+
+/* ShopScene */
+class ShopScene extends Phaser.Scene {
+  constructor(){ super({key:'ShopScene'}); }
+  create(){
+    this.add.text(600,80,'ショップ', {fontSize:28}).setOrigin(0.5);
+    this.add.text(80,120,`ゴールド: ${RUN.gold}`, {fontSize:18});
+    // items: 5 random cards, 3 relics, delete card option(1)
+    const cardOffers = Util.shuffle(CARD_TEMPLATES).slice(0,5).map(c=>({card:JSON.parse(JSON.stringify(c)), price: Math.floor(5 + Math.random()*8)}));
+    for(let i=0;i<cardOffers.length;i++){
+      const o = cardOffers[i];
+      const x = 120 + i*200;
+      const box = this.add.rectangle(x,260,180,140,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
+      this.add.text(x-70,230,o.card.name,{fontSize:14}).setOrigin(0);
+      this.add.text(x+70,230,`¥${o.price}`,{fontSize:12}).setOrigin(1,0);
+      this.add.text(x,260,o.card.text,{fontSize:12,wordWrap:{width:160}}).setOrigin(0.5);
+      box.on('pointerdown', ()=>{
+        if(RUN.gold < o.price) return;
+        RUN.gold -= o.price;
+        RUN.player.deck.push(o.card);
+        box.fillColor = 0x444444;
+      });
+    }
+    // relic offers
+    const relicOffers = Util.shuffle(RELIC_TEMPLATES.filter(r=>!RUN.relicIds.has(r.id))).slice(0,3);
+    for(let i=0;i<relicOffers.length;i++){
+      const r = relicOffers[i];
+      const x = 200 + i*300;
+      const box = this.add.rectangle(x,460,240,120,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
+      const price = 15;
+      this.add.text(x-100,432,r.name,{fontSize:14}).setOrigin(0);
+      this.add.text(x+100,432,`¥${price}`,{fontSize:12}).setOrigin(1,0);
+      this.add.text(x,460,r.desc,{fontSize:12,wordWrap:{width:200}}).setOrigin(0.5);
+      box.on('pointerdown', ()=>{
+        if(RUN.gold < price) return;
+        RUN.gold -= price;
+        RUN.applyRelic(r);
+        box.fillColor = 0x444444;
+      });
+    }
+    // delete card option (one-time)
+    const delBox = this.add.rectangle(900,560,240,120,0xaa4444).setStrokeStyle(2,0xffffff).setInteractive();
+    this.add.text(900,540,'カード削除 (¥20)', {fontSize:14}).setOrigin(0.5);
+    delBox.on('pointerdown', ()=>{
+      if(RUN.gold < 20) return;
+      if(RUN.player.deck.length<=1) return;
+      RUN.gold -= 20;
+      // remove a random non-basic card (try to remove strongest)
+      RUN.player.deck.sort((a,b)=> (b.defense||0 + b.damageToVuln||0) - (a.defense||0 + a.damageToVuln||0));
+      RUN.player.deck.pop();
+      this.add.text(900,620,'カードを1枚削除しました', {fontSize:12}).setOrigin(0.5);
+    });
+
+    const leave = this.add.rectangle(600,680,160,40,0x666666).setInteractive();
+    this.add.text(600,680,'店を出る', {fontSize:16}).setOrigin(0.5);
+    leave.on('pointerdown', ()=> this.scene.start('MapScene'));
+  }
+}
+
+/* EventScene */
+class EventScene extends Phaser.Scene {
+  constructor(){ super({key:'EventScene'}); }
+  create(){
+    this.add.text(600,80,'イベント', {fontSize:28}).setOrigin(0.5);
+    const events = [
+      {id:'budget_cut', text:'企業がコスト削減を発表。金銭エナジー減少', effect:()=>{ RUN.player.maxEnergy.money = Math.max(1, RUN.player.maxEnergy.money-1); RUN.player.energy.money = Math.min(RUN.player.energy.money, RUN.player.maxEnergy.money); }},
+      {id:'investment', text:'投資が入り、金銭を獲得', effect:()=>{ RUN.gold += 20; }},
+      {id:'insider', text:'内部不正が発生！戦闘に突入', effect:()=>{ /* start an enemy fight */ }},
+      {id:'policy', text:'ポリシー刷新で一時的バフ', effect:()=>{ RUN.player.defense += 6; }},
+      {id:'zero_day_found', text:'ゼロデイを発見！だが調査に時間が必要（時間エナジー減少）', effect:()=>{ RUN.player.maxEnergy.time = Math.max(1,RUN.player.maxEnergy.time-1); RUN.player.energy.time = Math.min(RUN.player.energy.time, RUN.player.maxEnergy.time); }}
+    ];
+    const ev = Util.randChoice(events);
+    this.add.text(600,140,ev.text, {fontSize:18}).setOrigin(0.5);
+    if(ev.id==='insider'){
+      // start battle immediately with an enemy
+      RUN.currentEnemy = JSON.parse(JSON.stringify(Util.randChoice(ENEMY_TEMPLATES.normal)));
+      RUN.currentEnemy.hp = RUN.currentEnemy.hp;
+      this.time.delayedCall(1200, ()=> this.scene.start('BattleScene', {elite:false}));
+      return;
+    } else {
+      ev.effect();
+      this.time.delayedCall(1200, ()=> this.scene.start('MapScene'));
+    }
+  }
+}
+
+/* GameOverScene */
+class GameOverScene extends Phaser.Scene {
+  constructor(){ super({key:'GameOverScene'}); }
+  init(data){ this.victory = data && data.victory; }
+  create(){
+    this.add.text(600,120, this.victory ? '勝利！ 攻撃者は退散した' : 'ゲームオーバー', {fontSize:34}).setOrigin(0.5);
+    this.add.text(600,180,`プレイ時間: ${Math.floor((Date.now()-RUN.startTimestamp)/1000)}秒`, {fontSize:16}).setOrigin(0.5);
+    this.add.text(600,220,`最終ゴールド: ${RUN.gold}`, {fontSize:16}).setOrigin(0.5);
+    this.add.text(600,260,`デッキ: ${RUN.player.deck.map(c=>c.name).join(', ')}`, {fontSize:12}).setOrigin(0.5);
+    this.add.text(600,300,`レリック: ${RUN.player.relics.map(r=>r.name).join(', ')}`, {fontSize:12}).setOrigin(0.5);
+    const nextBtn = this.add.rectangle(600,500,220,60,0x2d8cff).setInteractive();
+    this.add.text(600,500,'タイトルに戻る', {fontSize:20}).setOrigin(0.5);
+    nextBtn.on('pointerdown', ()=> this.scene.start('OpeningScene'));
+  }
+}
+
+/* ---------- Register scenes and start ---------- */
+config.scene = [OpeningScene, MapScene, BattleScene, RewardScene, ChestScene, RestScene, ShopScene, EventScene, GameOverScene];
+const game = new Phaser.Game(config);
+
+/* ---------- End of file ---------- */
+
+</script>
+</body>
+</html>
