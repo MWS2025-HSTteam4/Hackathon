@@ -391,7 +391,7 @@ class BattleScene extends Phaser.Scene {
     this.renderHand();
     this.updateInfo();
     // enemy turn
-    this.scene.pause();
+    // this.scene.pause();
     this.enemyTurn();
   }
 
@@ -413,10 +413,12 @@ class BattleScene extends Phaser.Scene {
       }
     }
     // simulate enemy taking any DOT? (simplified) -> we'll deduct small decay
+    /*
     if(e.tags.includes('recon')){
       // recon applies weak DOT to itself: simulate "time" reduces attacker persistence
       e.hp -= 2;
     }
+    */
     // compute next intent (random small)
     e.intentValue = Math.max(3, e.intentValue + Util.randChoice([-2,0,1]));
     e.intent = Util.randChoice(['attack','attack','attack','weaken']); // bias attack
