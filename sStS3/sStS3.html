@@ -74,6 +74,7 @@ class RunState {
   resetAll(){
     this.stageIndex = 0;
     this.map = []; // will be array of nodes
+    this.mapOptions = 3;
     // Player base stats / resources
     this.player = {
       maxHp: 100,
@@ -94,6 +95,15 @@ class RunState {
     this.playTime = 0;
     this.startTimestamp = Date.now();
   }
+
+  confirmStage(index, type) {
+    this.stageIndex = index;
+    this.stages[index] = { type, confirmed: true, cleared: false };
+  }
+  isStageConfirmed() {
+    return this.stages[this.stageIndex + 1]?.confirmed || false;
+  }
+
   applyRelic(relic){
     if(this.relicIds.has(relic.id)) return;
     this.relicIds.add(relic.id);
@@ -103,6 +113,20 @@ class RunState {
 }
 
 const RUN = new RunState();
+
+const GameState = {
+  currentStageIndex: 0, // 1ステージ目から開始
+  stages: [],
+
+  confirmStage(index, type) {
+    this.stageIndex = index;
+    this.stages[index] = { type, confirmed: true, cleared: false };
+  },
+
+  isStageConfirmed() {
+    return this.stages[this.stageIndex + 1]?.confirmed || false;
+  }
+};
 
 /* ---------- Phaser Config ---------- */
 const config = {
@@ -146,6 +170,7 @@ class OpeningScene extends Phaser.Scene {
 
 /* MapScene */
 class MapScene extends Phaser.Scene {
+  //*
   constructor(){ super({key:'MapScene'}); }
   create(){
     this.cameras.main.setBackgroundColor('#121212');
@@ -156,50 +181,110 @@ class MapScene extends Phaser.Scene {
     this.add.text(30,600,`金銭: ${RUN.gold}    HP: ${RUN.player.hp}/${RUN.player.maxHp}`, {fontSize:18});
     this.add.text(300,600,`Relics: ${RUN.player.relics.map(r=>r.name).join(', ')||'なし'}`, {fontSize:14});
   }
+  /*
+  create() {
+    this.add.text(400, 50, "マップ", { fontSize: "32px", color: "#fff" }).setOrigin(0.5);
+    // ステージデータを更新（未確定部分は？にする）
+    this.stageData = this.generateStages();
+    // マップを描画
+    this.renderMap();
+    // もし選択可能ステージがある場合 → 3択を提示
+    if (!RUN.isStageConfirmed()) {
+      this.presentChoices();
+    }
+  }
+  //*/
 
   generateMap(){
     // 10 stages: index 1..10 (we store 0..9)
     const nodes = [];
     for(let i=0;i<10;i++){
       let kind = 'enemy';
-      if(i===0) kind='enemy';
-      else if(i===9) kind='boss';
+      let confirmed = false;
+      if(i===0) kind='enemy', confirmed=true;
+      else if(i===9) kind='boss', confirmed=true;
+      /*
       else if(i>=5) {
         // 6-9 random from elite, rest, chest, shop, event
         kind = Util.randChoice(['elite','rest','chest','shop','event']);
       } else {
         kind = Util.randChoice(['enemy','rest','chest','shop','event']);
       }
-      nodes.push({index:i+1, kind:kind, chosen:false});
+      //*/
+      else kind = 'unknown';
+      //nodes.push({index:i+1, kind:kind, chosen:false});
+      nodes.push({index:i+1, kind:kind, chosen:false, confirmed: confirmed});
     }
     RUN.map = nodes;
+    //return nodes;
   }
-
+  /*
+  generateStages() {
+    let stages = [];
+    // 1ステージ目（敵固定）
+    stages.push({ type: "enemy", confirmed: true, cleared: false });
+    // 2〜9ステージ目（未確定）→ 「？」で表示
+    for (let i = 2; i <= 9; i++) {
+      stages.push({ type: "unknown", confirmed: false, cleared: false });
+    }
+    // 10ステージ目（ボス固定）
+    stages.push({ type: "boss", confirmed: true, cleared: false });
+    return stages;
+  }
+  //*/
   drawMap(){
     const baseX = 100;
-    const gapX = 100;
-    const y = 200;
+    const baseY = 200;
+    const gap = 90;
     // show nodes in a row; if too many, allow paging (simple)
     const viewStart = 0;
     for(let i=0;i<RUN.map.length;i++){
       const node = RUN.map[i];
-      const x = baseX + i*90;
-      const rect = this.add.rectangle(x, y, 80, 80, node.chosen?0x4444ff:0x333333).setStrokeStyle(2, 0xffffff).setInteractive();
-      const t = this.add.text(x, y-8, `${node.index}`, {fontSize:16}).setOrigin(0.5);
-      const k = this.add.text(x, y+12, `${node.kind}`, {fontSize:12}).setOrigin(0.5);
-      rect.on('pointerdown', ()=>{
-        if(node.chosen) return; // already passed
-        node.chosen = true;
-        RUN.stageIndex = node.index;
-        // go to correct scene
-        if(node.kind==='enemy') this.startBattle(false);
-        else if(node.kind==='elite') this.startBattle(true);
-        else if(node.kind==='boss') this.startBattle('boss');
-        else if(node.kind==='rest') this.scene.start('RestScene');
-        else if(node.kind==='chest') this.scene.start('ChestScene');
-        else if(node.kind==='shop') this.scene.start('ShopScene');
-        else if(node.kind==='event') this.scene.start('EventScene');
-      });
+      const x = baseX + i*gap;
+      if(i != RUN.stageIndex){
+        const y = baseY;
+        const rect = this.add.rectangle(x, y, 80, 80, node.chosen?0x4444ff:0x333333).setStrokeStyle(2, 0xffffff);
+        const t = this.add.text(x, y-8, `${node.index}`, {fontSize:16}).setOrigin(0.5);
+        const k = this.add.text(x, y+12, `${node.kind}`, {fontSize:12}).setOrigin(0.5);
+      } else {
+        let selectable;
+        if(node.confirmed){
+          selectable = 1;
+        }else{
+          selectable = RUN.mapOptions;
+        }
+        for(let j=0;j<selectable;j++){
+          const y = baseY + j*gap;
+          const rect = this.add.rectangle(x, y, 80, 80, node.chosen?0x4444ff:0x333333).setStrokeStyle(2, 0xffffff).setInteractive();
+          const t = this.add.text(x, y-8, `${node.index}`, {fontSize:16}).setOrigin(0.5);
+          let kind = node.kind;
+          if(node.kind == 'unknown'){
+            if(i>=5) {
+              // 6-9 random from elite, rest, chest, shop, event
+              kind = Util.randChoice(['elite','rest','chest','shop','event']);
+            } else {
+              kind = Util.randChoice(['enemy','rest','chest','shop','event']);
+            }
+          }
+          //const k = this.add.text(x, y+12, `${node.kind}`, {fontSize:12}).setOrigin(0.5);
+          const k = this.add.text(x, y+12, `${kind}`, {fontSize:12}).setOrigin(0.5);
+          rect.on('pointerdown', ()=>{
+            //if(node.chosen) return; // already passed
+            node.chosen = true;
+            RUN.stageIndex = node.index;
+            node.kind = kind;
+            node.confirmed = true;
+            // go to correct scene
+            if(node.kind==='enemy') this.startBattle(false);
+            else if(node.kind==='elite') this.startBattle(true);
+            else if(node.kind==='boss') this.startBattle('boss');
+            else if(node.kind==='rest') this.scene.start('RestScene');
+            else if(node.kind==='chest') this.scene.start('ChestScene');
+            else if(node.kind==='shop') this.scene.start('ShopScene');
+            else if(node.kind==='event') this.scene.start('EventScene');
+          });
+        }
+      }
     }
     // legend
     this.add.text(900,50,'伝説: 敵/エリート/ボス/休憩/宝箱/ショップ/イベント', {fontSize:12});
@@ -220,6 +305,105 @@ class MapScene extends Phaser.Scene {
       close.on('pointerdown', ()=>{ modal.destroy(); close.destroy(); closeText.destroy(); deckTxt.destroy(); });
     });
   }
+  /*
+  renderMap() {
+    const startX = 100;
+    const startY = 150;
+    const stepX = 120;
+    this.stageSprites = [];
+
+    this.stageData.forEach((stage, i) => {
+      let label = "？";
+      if (stage.cleared) {
+        label = "クリア済み";
+      } else if (stage.confirmed) {
+        label = this.getStageLabel(stage.type);
+      }
+
+      let stageText = this.add.text(startX + i * stepX, startY, label, {
+        fontSize: "20px",
+        color: stage.cleared ? "#888" : "#fff"
+      }).setOrigin(0.5);
+
+      this.stageSprites.push(stageText);
+    });
+  }
+  presentChoices() {
+    // 現在のステージ位置を取得
+    let currentStageIndex = RUN.stageIndex;
+    if (currentStageIndex >= 9) return; // 10ステージ目はボス固定
+
+    // 3択を生成
+    let options = this.generateStageOptions(currentStageIndex + 1);
+    const baseY = 300;
+    options.forEach((opt, i) => {
+      let choiceText = this.add.text(200 + i * 200, baseY, this.getStageLabel(opt), {
+        fontSize: "20px",
+        color: "#0f0",
+        backgroundColor: "#000",
+        padding: { x: 10, y: 5 }
+      }).setOrigin(0.5).setInteractive();
+
+      choiceText.on("pointerdown", () => {
+        // 選択したステージを確定
+        this.stageData[currentStageIndex] = { ...this.stageData[currentStageIndex], cleared: true };
+        this.stageData[currentStageIndex + 1] = { type: opt, confirmed: true, cleared: false };
+
+        RUN.confirmStage(currentStageIndex + 1, opt);
+
+        // 次シーンへ遷移
+        this.gotoStage(opt);
+      });
+    });
+  }
+  generateStageOptions(stageIndex) {
+    // ステージの種類をランダム生成
+    let pool = [];
+    if (stageIndex >= 2 && stageIndex <= 5) {
+      pool = ["enemy", "rest", "treasure", "shop", "event"];
+    } else if (stageIndex >= 6 && stageIndex <= 9) {
+      pool = ["elite", "rest", "treasure", "shop", "event"];
+    }
+    let choices = [];
+    for (let i = 0; i < 3; i++) {
+      choices.push(pool[Math.floor(Math.random() * pool.length)]);
+    }
+    return choices;
+  }
+  getStageLabel(type) {
+    switch (type) {
+      case "enemy": return "敵";
+      case "elite": return "エリート敵";
+      case "boss": return "ボス";
+      case "rest": return "休憩";
+      case "treasure": return "宝箱";
+      case "shop": return "ショップ";
+      case "event": return "イベント";
+      default: return "？";
+    }
+  }
+  gotoStage(type) {
+    switch (type) {
+      case "enemy":
+      case "elite":
+      case "boss":
+        this.scene.start("BattleScene");
+        break;
+      case "rest":
+        this.scene.start("RestScene");
+        break;
+      case "treasure":
+        this.scene.start("TreasureScene");
+        break;
+      case "shop":
+        this.scene.start("ShopScene");
+        break;
+      case "event":
+        this.scene.start("EventScene");
+        break;
+    }
+  }
+  //*/
 
   startBattle(eliteFlag){
     // prepare enemy from templates based on type & stage
@@ -244,6 +428,7 @@ class MapScene extends Phaser.Scene {
     RUN.player.status = {}; // status effects
     this.scene.start('BattleScene', {elite: eliteFlag});
   }
+  //*/
 }
 
 /* BattleScene */
