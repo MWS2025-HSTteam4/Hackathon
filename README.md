@@ -69,3 +69,19 @@ $ git push origin feature/{branchname}：featureブランチをリモートリ�
 Gitのホスティングサービスのサイト画面でpull requestを作成する：このページのどっかにあるはず，この前の手順でpushをしていたら
 $ git checkout master
 ```
+## 操作した結果
+```
+$ git checkout -b feature/{branchname}：ブランチの作成・移動
+$ git branch：現在のブランチのチェック
+$ git add .：編集後にこれでインデックスに追加
+$ git commit -m "コメント"：commitする
+ここまででコマンドラインでの作業は終わり
+githun上でpull requestを作成
+マージする
+フェッチ系はまだわかってない
+```
+
+
+
+
+
