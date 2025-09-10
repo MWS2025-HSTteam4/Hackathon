@@ -74,12 +74,14 @@ class RunState {
   resetAll(){
     this.stageIndex = 0;
     this.map = []; // will be array of nodes
+    this.debugMap = [];
     this.mapOptions = 3;
     // Player base stats / resources
     this.player = {
       maxHp: 100,
       hp: 100,
       defense: 0,
+      drawcards: 5,
       // triple-energy
       maxEnergy: {money:3, labor:3, time:3},
       energy: {money:3, labor:3, time:3},
@@ -96,37 +98,61 @@ class RunState {
     this.startTimestamp = Date.now();
   }
 
-  confirmStage(index, type) {
-    this.stageIndex = index;
-    this.stages[index] = { type, confirmed: true, cleared: false };
-  }
-  isStageConfirmed() {
-    return this.stages[this.stageIndex + 1]?.confirmed || false;
-  }
-
   applyRelic(relic){
     if(this.relicIds.has(relic.id)) return;
     this.relicIds.add(relic.id);
     this.player.relics.push(relic);
     if(relic.effect) relic.effect(this.player);
   }
+
+  renderCard(scene, x, y, width, height, card, onClick = null){
+    const cardBg = scene.add.rectangle(x, y, width, height, 0x333333).setOrigin(0.5);
+    cardBg.setStrokeStyle(2, 0xffffff);
+    /*
+    const box = this.add.rectangle(x,y,180,260,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
+    const title = this.add.text(x-70,y-100,card.name,{fontSize:14}).setOrigin(0);
+    const costText = `金${card.cost.money||0} 労${card.cost.labor||0} 時${card.cost.time||0}`;
+    const cost = this.add.text(x+60,y-100,costText,{fontSize:12}).setOrigin(1,0);
+    const body = this.add.text(x,y-20,card.text,{fontSize:12,wordWrap:{width:160}}).setOrigin(0.5);
+    */
+
+    // カード名
+    const nameText = scene.add.text(x, y - 50, card.name, {
+      fontSize: "14px",
+      color: "#ffffff",
+      align: "center",
+      wordWrap: { width: 90 }
+    }).setOrigin(0.5);
+
+    // コスト表示
+    const costText = scene.add.text(x, y - 20, `💰${card.cost.money} 👥${card.cost.labor} ⏱${card.cost.time}`, {
+      fontSize: "12px",
+      color: "#ffcc00",
+      align: "center"
+    }).setOrigin(0.5);
+
+    // 効果説明
+    //const effectText = scene.add.text(x, y + 20, `${card.effect} +${card.value}`, {
+    const effectText = scene.add.text(x, y + 20, `${card.text}`, {
+      fontSize: "12px",
+      color: "#00ff00",
+      align: "center"
+    }).setOrigin(0.5);
+    //const body = this.add.text(x,y-20,card.text,{fontSize:12,wordWrap:{width:160}}).setOrigin(0.5);
+    /*
+    // クリック可能にする場合
+    if (onClick) {
+      cardBg.setInteractive();
+      cardBg.on("pointerdown", () => onClick);
+    }
+    //*/
+
+    // カードをまとめて返す（削除や移動に使えるように）
+    return { cardBg, nameText, costText, effectText };
+  }
 }
 
 const RUN = new RunState();
-
-const GameState = {
-  currentStageIndex: 0, // 1ステージ目から開始
-  stages: [],
-
-  confirmStage(index, type) {
-    this.stageIndex = index;
-    this.stages[index] = { type, confirmed: true, cleared: false };
-  },
-
-  isStageConfirmed() {
-    return this.stages[this.stageIndex + 1]?.confirmed || false;
-  }
-};
 
 /* ---------- Phaser Config ---------- */
 const config = {
@@ -178,6 +204,7 @@ class MapScene extends Phaser.Scene {
     // If map not generated, generate
     if(RUN.map.length===0) this.generateMap();
     this.drawMap();
+    this.drawDebugMap();
     this.add.text(30,600,`金銭: ${RUN.gold}    HP: ${RUN.player.hp}/${RUN.player.maxHp}`, {fontSize:18});
     this.add.text(300,600,`Relics: ${RUN.player.relics.map(r=>r.name).join(', ')||'なし'}`, {fontSize:14});
   }
@@ -216,6 +243,13 @@ class MapScene extends Phaser.Scene {
       nodes.push({index:i+1, kind:kind, chosen:false, confirmed: confirmed});
     }
     RUN.map = nodes;
+    RUN.debugMap[0] = {index:0, kind:'enemy', chosen:false, confirmed:true};
+    RUN.debugMap[1] = {index:0, kind:'elite', chosen:false, confirmed:true};
+    RUN.debugMap[2] = {index:0, kind:'rest', chosen:false, confirmed:true};
+    RUN.debugMap[3] = {index:0, kind:'chest', chosen:false, confirmed:true};
+    RUN.debugMap[4] = {index:0, kind:'shop', chosen:false, confirmed:true};
+    RUN.debugMap[5] = {index:0, kind:'event', chosen:false, confirmed:true};
+    RUN.debugMap[5] = {index:0, kind:'boss', chosen:false, confirmed:true};
     //return nodes;
   }
   /*
@@ -304,6 +338,35 @@ class MapScene extends Phaser.Scene {
       const deckTxt = this.add.text(300,240,`デッキ:\n${RUN.player.deck.map(c=>c.name).join('\n')}\n\n所持レリック:\n${RUN.player.relics.map(r=>r.name).join(', ')||'なし'}`, {fontSize:14}).setDepth(11);
       close.on('pointerdown', ()=>{ modal.destroy(); close.destroy(); closeText.destroy(); deckTxt.destroy(); });
     });
+  }
+  drawDebugMap(){
+    this.add.text(30,300,'デバッグ用マップ', {fontSize:28});
+    const baseX = 100;
+    const baseY = 400;
+    const gap = 90;
+    // show nodes in a row; if too many, allow paging (simple)
+    for(let i=0;i<RUN.debugMap.length;i++){
+      const node = RUN.debugMap[i];
+      const x = baseX + i*gap;
+      const y = baseY;
+      const rect = this.add.rectangle(x, y, 80, 80, node.chosen?0x4444ff:0x333333).setStrokeStyle(2, 0xffffff).setInteractive();
+      const t = this.add.text(x, y-8, `${node.index}`, {fontSize:16}).setOrigin(0.5);
+      const k = this.add.text(x, y+12, `${node.kind}`, {fontSize:12}).setOrigin(0.5);
+      rect.on('pointerdown', ()=>{
+        //if(node.chosen) return; // already passed
+        node.chosen = true;
+        node.confirmed = true;
+        // go to correct scene
+        if(node.kind==='enemy') this.startBattle(false);
+        else if(node.kind==='elite') this.startBattle(true);
+        else if(node.kind==='boss') this.startBattle('boss');
+        else if(node.kind==='rest') this.scene.start('RestScene');
+        else if(node.kind==='chest') this.scene.start('ChestScene');
+        else if(node.kind==='shop') this.scene.start('ShopScene');
+        else if(node.kind==='event') this.scene.start('EventScene');
+        });
+      
+    }
   }
   /*
   renderMap() {
@@ -472,7 +535,7 @@ class BattleScene extends Phaser.Scene {
     RUN.player.energy = {money:RUN.player.maxEnergy.money, labor:RUN.player.maxEnergy.labor, time:RUN.player.maxEnergy.time};
     // draw 5 cards
     this.hand = [];
-    for(let i=0;i<5;i++) this.drawCard();
+    for(let i=0;i<RUN.player.drawcards;i++) this.drawCard();
     this.renderHand();
     this.updateInfo();
   }
@@ -496,12 +559,19 @@ class BattleScene extends Phaser.Scene {
     for(let i=0;i<this.hand.length;i++){
       const card = this.hand[i];
       const x = startX + i*200;
+      //const re = RUN.renderCard(this, x, y, 180, 260, card, this.playCard(card, i));
+      const re = RUN.renderCard(this, x, y, 180, 260, card);
+      const box = re.cardBg;
+      /*
       const box = this.add.rectangle(x,y,180,260,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
       const title = this.add.text(x-70,y-100,card.name,{fontSize:14}).setOrigin(0);
       const costText = `金${card.cost.money||0} 労${card.cost.labor||0} 時${card.cost.time||0}`;
       const cost = this.add.text(x+60,y-100,costText,{fontSize:12}).setOrigin(1,0);
       const body = this.add.text(x,y-20,card.text,{fontSize:12,wordWrap:{width:160}}).setOrigin(0.5);
-      this.cardGroup.addMultiple([box,title,cost,body]);
+      */
+      //this.cardGroup.addMultiple([box,title,cost,body]);
+      this.cardGroup.addMultiple([box,re.nameText,re.costText,re.effectText]);
+      box.setInteractive();
       box.on('pointerdown', ()=> this.playCard(card, i));
     }
   }
@@ -657,32 +727,46 @@ class RewardScene extends Phaser.Scene {
   constructor(){ super({key:'RewardScene'}); }
   init(data){ this.gained = data.gold || 0; }
   create(){
+    this.selectCardGroup = this.add.group();
+    this.selectCardGroup.clear(true,true);
     this.add.text(600,80,'戦闘勝利！ 報酬', {fontSize:26}).setOrigin(0.5);
     this.add.text(600,120,`ゴールド +${this.gained}`, {fontSize:18}).setOrigin(0.5);
     // show 3 random cards to choose from
     const choices = Util.shuffle(CARD_TEMPLATES).slice(0,3).map(c => JSON.parse(JSON.stringify(c)));
-    this.add.text(200,200,'カードを選択してデッキに追加', {fontSize:18});
+    const selectCardText = this.add.text(200,200,'カードを選択してデッキに追加', {fontSize:18});
+    this.selectCardGroup.add(selectCardText)
     for(let i=0;i<choices.length;i++){
       const c = choices[i];
       const x = 200 + i*300;
+      const card = RUN.renderCard(this, x, 300, 240, 140, c);
+      const box = card.cardBg;
+      this.selectCardGroup.addMultiple([box,card.nameText,card.costText,card.effectText]);
+      /*
       const box = this.add.rectangle(x,300,240,140,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
       this.add.text(x-100,260,c.name,{fontSize:14}).setOrigin(0);
       this.add.text(x+100,260,`金${c.cost.money||0} 労${c.cost.labor||0} 時${c.cost.time||0}`,{fontSize:12}).setOrigin(1,0);
       this.add.text(x,300,c.text,{fontSize:12,wordWrap:{width:200}}).setOrigin(0.5);
+      */
+      box.setInteractive();
       box.on('pointerdown', ()=>{
         RUN.player.deck.push(c);
-        this.finishRewards();
+        //this.finishRewards();
+        this.selectRelics();
       });
     }
     // skip button
     const skip = this.add.rectangle(600,520,160,50,0x666666).setInteractive();
-    this.add.text(600,520,'スキップ', {fontSize:18}).setOrigin(0.5);
-    skip.on('pointerdown', ()=> this.finishRewards());
+    const skipText = this.add.text(600,520,'スキップ', {fontSize:18}).setOrigin(0.5);
+    skip.on('pointerdown', ()=> this.selectRelics());
+    this.selectCardGroup.addMultiple([skip,skipText]);
+  }
 
+  selectRelics(){
+    this.selectCardGroup.clear(true,true);
     // Next: relic selection (unowned)
     this.relicChoices = Util.shuffle(RELIC_TEMPLATES.filter(r=>!RUN.relicIds.has(r.id))).slice(0,3);
     this.relicTexts = [];
-    this.add.text(600,380,'レリックを1つ選択（またはスキップ）', {fontSize:18}).setOrigin(0.5);
+    this.add.text(600,300,'レリックを1つ選択（またはスキップ）', {fontSize:18}).setOrigin(0.5);
     for(let i=0;i<this.relicChoices.length;i++){
       const r = this.relicChoices[i];
       const x = 250 + i*300;
