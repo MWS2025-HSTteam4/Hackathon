@@ -84,15 +84,17 @@ class RunState {
       defense: 0,
       drawcards: 5,
       // triple-energy
-      maxEnergy: {money:3, labor:3, time:3},
-      energy: {money:3, labor:3, time:3},
+      maxEnergy: 3,
+      energy: 3,
       relics: [],
       deck: [],
       discard: [],
-      drawPile: []
+      drawPile: [],
+      applyEffect: [],
+      applyEffectQueue: []
     };
     // gold -> money resource used for shops but also energy
-    this.gold = 10;
+    this.gold = 100;
     // store all-owned relic ids
     this.relicIds = new Set();
     this.playTime = 0;
@@ -109,13 +111,6 @@ class RunState {
   renderCard(scene, x, y, width, height, card, onClick = null){
     const cardBg = scene.add.rectangle(x, y, width, height, 0x333333).setOrigin(0.5);
     cardBg.setStrokeStyle(2, 0xffffff);
-    /*
-    const box = this.add.rectangle(x,y,180,260,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
-    const title = this.add.text(x-70,y-100,card.name,{fontSize:14}).setOrigin(0);
-    const costText = `金${card.cost.money||0} 労${card.cost.labor||0} 時${card.cost.time||0}`;
-    const cost = this.add.text(x+60,y-100,costText,{fontSize:12}).setOrigin(1,0);
-    const body = this.add.text(x,y-20,card.text,{fontSize:12,wordWrap:{width:160}}).setOrigin(0.5);
-    */
 
     // カード名
     const nameText = scene.add.text(x, y - 50, card.name, {
@@ -133,30 +128,18 @@ class RunState {
     }).setOrigin(0.5);
 
     // 効果説明
-    //const effectText = scene.add.text(x, y + 20, `${card.effect} +${card.value}`, {
     const effectText = scene.add.text(x, y + 20, `${card.text}`, {
       fontSize: "12px",
       color: "#00ff00",
       align: "center"
     }).setOrigin(0.5);
     //const body = this.add.text(x,y-20,card.text,{fontSize:12,wordWrap:{width:160}}).setOrigin(0.5);
-    /*
-    // クリック可能にする場合
-    if (onClick) {
-      cardBg.setInteractive();
-      cardBg.on("pointerdown", () => onClick);
-    }
-    //*/
 
     // カードをまとめて返す（削除や移動に使えるように）
     return { cardBg, nameText, costText, effectText };
   }
 
   showDeckViewBtn(scene){
-    /*
-    const deckBtn = this.add.rectangle(900,150,200,40,0x2dcc70).setInteractive();
-    this.add.text(900,150,'デッキを見る', {fontSize:16}).setOrigin(0.5);
-    */
     const deckBtn = scene.add.rectangle(1100,20,200,40,0x2dcc70).setInteractive();
     scene.add.text(1100,20,'デッキを見る', {fontSize:16}).setOrigin(0.5);
     deckBtn.on('pointerdown', ()=> this.showDeck(scene));
@@ -248,22 +231,9 @@ class MapScene extends Phaser.Scene {
     if(RUN.map.length===0) this.generateMap();
     this.drawMap();
     if(debugMode) this.drawDebugMap();
-    this.add.text(30,600,`金銭: ${RUN.gold}    HP: ${RUN.player.hp}/${RUN.player.maxHp}`, {fontSize:18});
+    this.add.text(30,600,`予算: ${RUN.gold}    HP: ${RUN.player.hp}/${RUN.player.maxHp}`, {fontSize:18});
     this.add.text(300,600,`Relics: ${RUN.player.relics.map(r=>r.name).join(', ')||'なし'}`, {fontSize:14});
   }
-  /*
-  create() {
-    this.add.text(400, 50, "マップ", { fontSize: "32px", color: "#fff" }).setOrigin(0.5);
-    // ステージデータを更新（未確定部分は？にする）
-    this.stageData = this.generateStages();
-    // マップを描画
-    this.renderMap();
-    // もし選択可能ステージがある場合 → 3択を提示
-    if (!RUN.isStageConfirmed()) {
-      this.presentChoices();
-    }
-  }
-  //*/
 
   generateMap(){
     // 10 stages: index 1..10 (we store 0..9)
@@ -273,16 +243,7 @@ class MapScene extends Phaser.Scene {
       let confirmed = false;
       if(i===0) kind='enemy', confirmed=true;
       else if(i===9) kind='boss', confirmed=true;
-      /*
-      else if(i>=5) {
-        // 6-9 random from elite, rest, chest, shop, event
-        kind = Util.randChoice(['elite','rest','chest','shop','event']);
-      } else {
-        kind = Util.randChoice(['enemy','rest','chest','shop','event']);
-      }
-      //*/
       else kind = 'unknown';
-      //nodes.push({index:i+1, kind:kind, chosen:false});
       nodes.push({index:i+1, kind:kind, chosen:false, confirmed: confirmed});
     }
     RUN.map = nodes;
@@ -295,20 +256,6 @@ class MapScene extends Phaser.Scene {
     RUN.debugMap[5] = {index:0, kind:'boss', chosen:false, confirmed:true};
     //return nodes;
   }
-  /*
-  generateStages() {
-    let stages = [];
-    // 1ステージ目（敵固定）
-    stages.push({ type: "enemy", confirmed: true, cleared: false });
-    // 2〜9ステージ目（未確定）→ 「？」で表示
-    for (let i = 2; i <= 9; i++) {
-      stages.push({ type: "unknown", confirmed: false, cleared: false });
-    }
-    // 10ステージ目（ボス固定）
-    stages.push({ type: "boss", confirmed: true, cleared: false });
-    return stages;
-  }
-  //*/
   drawMap(){
     const baseX = 100;
     const baseY = 200;
@@ -343,10 +290,8 @@ class MapScene extends Phaser.Scene {
               kind = Util.randChoice(['enemy','rest','chest','shop','event']);
             }
           }
-          //const k = this.add.text(x, y+12, `${node.kind}`, {fontSize:12}).setOrigin(0.5);
           const k = this.add.text(x, y+12, `${kind}`, {fontSize:12}).setOrigin(0.5);
           rect.on('pointerdown', ()=>{
-            //if(node.chosen) return; // already passed
             node.chosen = true;
             RUN.stageIndex = node.index;
             node.kind = kind;
@@ -369,24 +314,6 @@ class MapScene extends Phaser.Scene {
     // show remaining count
     const remaining = RUN.map.filter(n=>!n.chosen).length;
     this.add.text(900,110,`残りステージ: ${remaining}`, {fontSize:14});
-    // show deck button -> view deck
-    //RUN.showDeckViewBtn(this); // <- shift to above
-    /*
-    const deckBtn = this.add.rectangle(900,150,200,40,0x2dcc70).setInteractive();
-    this.add.text(900,150,'デッキを見る', {fontSize:16}).setOrigin(0.5);
-    deckBtn.on('pointerdown', ()=> RUN.showDeck(this));
-    //*/
-    /*
-    deckBtn.on('pointerdown', ()=>{
-      // simple deck modal using text
-      let y = 200;
-      const modal = this.add.rectangle(600,360,700,420,0x000000,0.8).setDepth(10);
-      const close = this.add.rectangle(600,620,100,40,0xff7777).setInteractive().setDepth(11);
-      const closeText = this.add.text(600,620,'閉じる',{fontSize:16}).setOrigin(0.5).setDepth(11);
-      const deckTxt = this.add.text(300,240,`デッキ:\n${RUN.player.deck.map(c=>c.name).join('\n')}\n\n所持レリック:\n${RUN.player.relics.map(r=>r.name).join(', ')||'なし'}`, {fontSize:14}).setDepth(11);
-      close.on('pointerdown', ()=>{ modal.destroy(); close.destroy(); closeText.destroy(); deckTxt.destroy(); });
-    });
-    */
   }
   drawDebugMap(){
     this.add.text(30,300,'デバッグ用マップ', {fontSize:28});
@@ -417,105 +344,6 @@ class MapScene extends Phaser.Scene {
       
     }
   }
-  /*
-  renderMap() {
-    const startX = 100;
-    const startY = 150;
-    const stepX = 120;
-    this.stageSprites = [];
-
-    this.stageData.forEach((stage, i) => {
-      let label = "？";
-      if (stage.cleared) {
-        label = "クリア済み";
-      } else if (stage.confirmed) {
-        label = this.getStageLabel(stage.type);
-      }
-
-      let stageText = this.add.text(startX + i * stepX, startY, label, {
-        fontSize: "20px",
-        color: stage.cleared ? "#888" : "#fff"
-      }).setOrigin(0.5);
-
-      this.stageSprites.push(stageText);
-    });
-  }
-  presentChoices() {
-    // 現在のステージ位置を取得
-    let currentStageIndex = RUN.stageIndex;
-    if (currentStageIndex >= 9) return; // 10ステージ目はボス固定
-
-    // 3択を生成
-    let options = this.generateStageOptions(currentStageIndex + 1);
-    const baseY = 300;
-    options.forEach((opt, i) => {
-      let choiceText = this.add.text(200 + i * 200, baseY, this.getStageLabel(opt), {
-        fontSize: "20px",
-        color: "#0f0",
-        backgroundColor: "#000",
-        padding: { x: 10, y: 5 }
-      }).setOrigin(0.5).setInteractive();
-
-      choiceText.on("pointerdown", () => {
-        // 選択したステージを確定
-        this.stageData[currentStageIndex] = { ...this.stageData[currentStageIndex], cleared: true };
-        this.stageData[currentStageIndex + 1] = { type: opt, confirmed: true, cleared: false };
-
-        RUN.confirmStage(currentStageIndex + 1, opt);
-
-        // 次シーンへ遷移
-        this.gotoStage(opt);
-      });
-    });
-  }
-  generateStageOptions(stageIndex) {
-    // ステージの種類をランダム生成
-    let pool = [];
-    if (stageIndex >= 2 && stageIndex <= 5) {
-      pool = ["enemy", "rest", "treasure", "shop", "event"];
-    } else if (stageIndex >= 6 && stageIndex <= 9) {
-      pool = ["elite", "rest", "treasure", "shop", "event"];
-    }
-    let choices = [];
-    for (let i = 0; i < 3; i++) {
-      choices.push(pool[Math.floor(Math.random() * pool.length)]);
-    }
-    return choices;
-  }
-  getStageLabel(type) {
-    switch (type) {
-      case "enemy": return "敵";
-      case "elite": return "エリート敵";
-      case "boss": return "ボス";
-      case "rest": return "休憩";
-      case "treasure": return "宝箱";
-      case "shop": return "ショップ";
-      case "event": return "イベント";
-      default: return "？";
-    }
-  }
-  gotoStage(type) {
-    switch (type) {
-      case "enemy":
-      case "elite":
-      case "boss":
-        this.scene.start("BattleScene");
-        break;
-      case "rest":
-        this.scene.start("RestScene");
-        break;
-      case "treasure":
-        this.scene.start("TreasureScene");
-        break;
-      case "shop":
-        this.scene.start("ShopScene");
-        break;
-      case "event":
-        this.scene.start("EventScene");
-        break;
-    }
-  }
-  //*/
 
   startBattle(eliteFlag){
     // prepare enemy from templates based on type & stage
@@ -536,7 +364,7 @@ class MapScene extends Phaser.Scene {
     if(RUN.player.drawPile.length===0) RUN.player.drawPile = Util.shuffle(RUN.player.deck.slice());
     // reset temporary player values
     RUN.player.defense = 0;
-    RUN.player.energy = {money:RUN.player.maxEnergy.money, labor:RUN.player.maxEnergy.labor, time:RUN.player.maxEnergy.time};
+    RUN.player.energy = RUN.player.maxEnergy;
     RUN.player.status = {}; // status effects
     this.scene.start('BattleScene', {elite: eliteFlag});
   }
@@ -571,7 +399,7 @@ class BattleScene extends Phaser.Scene {
 
   formatPlayer(){
     const p = RUN.player;
-    return `プレイヤ HP:${p.hp}/${p.maxHp}  防御:${p.defense}\n金銭:${p.energy.money}/${p.maxEnergy.money} 労働:${p.energy.labor}/${p.maxEnergy.labor} 時間:${p.energy.time}/${p.maxEnergy.time}\nゴールド:${RUN.gold}`;
+    return `プレイヤ\nHP:${p.hp}/${p.maxHp}\n防御:${p.defense}\n労働力:${p.energy}/${p.maxEnergy}\n予算:${RUN.gold}`;
   }
   formatEnemy(){
     const e = RUN.currentEnemy;
@@ -584,7 +412,9 @@ class BattleScene extends Phaser.Scene {
     // reset player defense to 0 per spec
     RUN.player.defense = 0;
     // recover energy to max
-    RUN.player.energy = {money:RUN.player.maxEnergy.money, labor:RUN.player.maxEnergy.labor, time:RUN.player.maxEnergy.time};
+    RUN.player.energy = RUN.player.maxEnergy;
+    // いずれ時間コストを払うまで労働力コストが回収できない仕様に直す
+    // 一旦，ターン開始時にすべて回収できるようにする
     // draw 5 cards
     this.hand = [];
     for(let i=0;i<RUN.player.drawcards;i++) this.drawCard();
@@ -611,17 +441,8 @@ class BattleScene extends Phaser.Scene {
     for(let i=0;i<this.hand.length;i++){
       const card = this.hand[i];
       const x = startX + i*200;
-      //const re = RUN.renderCard(this, x, y, 180, 260, card, this.playCard(card, i));
       const re = RUN.renderCard(this, x, y, 180, 260, card);
       const box = re.cardBg;
-      /*
-      const box = this.add.rectangle(x,y,180,260,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
-      const title = this.add.text(x-70,y-100,card.name,{fontSize:14}).setOrigin(0);
-      const costText = `金${card.cost.money||0} 労${card.cost.labor||0} 時${card.cost.time||0}`;
-      const cost = this.add.text(x+60,y-100,costText,{fontSize:12}).setOrigin(1,0);
-      const body = this.add.text(x,y-20,card.text,{fontSize:12,wordWrap:{width:160}}).setOrigin(0.5);
-      */
-      //this.cardGroup.addMultiple([box,title,cost,body]);
       this.cardGroup.addMultiple([box,re.nameText,re.costText,re.effectText]);
       box.setInteractive();
       box.on('pointerdown', ()=> this.playCard(card, i));
@@ -631,52 +452,22 @@ class BattleScene extends Phaser.Scene {
   playCard(card, index){
     // check cost
     const e = RUN.player.energy;
-    if((e.money < (card.cost.money||0)) || (e.labor < (card.cost.labor||0)) || (e.time < (card.cost.time||0))){
+    const g = RUN.gold;
+    //if((e.money < (card.cost.money||0)) || (e.labor < (card.cost.labor||0)) || (e.time < (card.cost.time||0))){
+    if((g < (card.cost.money||0)) || (e < card.cost.labor || 0) ){
       this.messageText.setText('コスト不足で使用できません');
       return;
     }
     // pay cost
+    e -= card.cost.labor;
+    g -= card.cost.money;
+    /*
     e.money -= (card.cost.money||0);
     e.labor -= (card.cost.labor||0);
     e.time -= (card.cost.time||0);
-    // apply effects (simplified)
-    // defense
-    if(card.defense){
-      let defGain = card.defense;
-      // relic synergy: network_expert doubles network synergy defense
-      if(card.synergy === 'network' && RUN.relicIds.has('network_expert')) defGain = Math.floor(defGain*1.5);
-      RUN.player.defense += defGain;
-    }
-    // damage to enemy
-    if(card.damageToVuln){
-      // check enemy def first
-      let dmg = card.damageToVuln;
-      // if enemy has defense reduce
-      const eDef = RUN.currentEnemy.def;
-      if(dmg <= eDef){
-        // reduce enemy def
-        RUN.currentEnemy.def -= dmg;
-      } else {
-        const over = dmg - RUN.currentEnemy.def;
-        RUN.currentEnemy.def = 0;
-        RUN.currentEnemy.hp -= over;
-      }
-    }
-    // heal
-    if(card.heal){
-      RUN.player.hp = Util.clamp(RUN.player.hp + card.heal, 0, RUN.player.maxHp);
-    }
-    // draw
-    if(card.draw){
-      for(let i=0;i<card.draw;i++) this.drawCard();
-    }
-    // buff enemy or debuff
-    if(card.debuffEnemy){
-      RUN.currentEnemy.def = Math.max(0, RUN.currentEnemy.def - card.debuffEnemy);
-    }
-    if(card.buffDefense){
-      RUN.player.defense += card.buffDefense;
-    }
+    */
+    // delay apply effect
+
 
     // move card to discard
     RUN.player.discard.push(card);
@@ -725,7 +516,7 @@ class BattleScene extends Phaser.Scene {
       // recon applies weak DOT to itself: simulate "time" reduces attacker persistence
       e.hp -= 2;
     }
-    */
+    //*/
     // compute next intent (random small)
     e.intentValue = Math.max(3, e.intentValue + Util.randChoice([-2,0,1]));
     e.intent = Util.randChoice(['attack','attack','attack','weaken']); // bias attack
@@ -772,6 +563,50 @@ class BattleScene extends Phaser.Scene {
     // go to reward scene
     this.scene.start('RewardScene', {gold:gained});
   }
+
+  delayApplyEffects(card){
+
+  }
+  applyEffects(card){
+    // apply effects (simplified)
+    // defense
+    if(card.defense){
+      let defGain = card.defense;
+      // relic synergy: network_expert doubles network synergy defense
+      if(card.synergy === 'network' && RUN.relicIds.has('network_expert')) defGain = Math.floor(defGain*1.5);
+      RUN.player.defense += defGain;
+    }
+    // damage to enemy
+    if(card.damageToVuln){
+      // check enemy def first
+      let dmg = card.damageToVuln;
+      // if enemy has defense reduce
+      const eDef = RUN.currentEnemy.def;
+      if(dmg <= eDef){
+        // reduce enemy def
+        RUN.currentEnemy.def -= dmg;
+      } else {
+        const over = dmg - RUN.currentEnemy.def;
+        RUN.currentEnemy.def = 0;
+        RUN.currentEnemy.hp -= over;
+      }
+    }
+    // heal
+    if(card.heal){
+      RUN.player.hp = Util.clamp(RUN.player.hp + card.heal, 0, RUN.player.maxHp);
+    }
+    // draw
+    if(card.draw){
+      for(let i=0;i<card.draw;i++) this.drawCard();
+    }
+    // buff enemy or debuff
+    if(card.debuffEnemy){
+      RUN.currentEnemy.def = Math.max(0, RUN.currentEnemy.def - card.debuffEnemy);
+    }
+    if(card.buffDefense){
+      RUN.player.defense += card.buffDefense;
+    }
+  }
 }
 
 /* RewardScene */
@@ -794,12 +629,6 @@ class RewardScene extends Phaser.Scene {
       const card = RUN.renderCard(this, x, 350, 240, 140, c);
       const box = card.cardBg;
       this.selectCardGroup.addMultiple([box,card.nameText,card.costText,card.effectText]);
-      /*
-      const box = this.add.rectangle(x,300,240,140,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
-      this.add.text(x-100,260,c.name,{fontSize:14}).setOrigin(0);
-      this.add.text(x+100,260,`金${c.cost.money||0} 労${c.cost.labor||0} 時${c.cost.time||0}`,{fontSize:12}).setOrigin(1,0);
-      this.add.text(x,300,c.text,{fontSize:12,wordWrap:{width:200}}).setOrigin(0.5);
-      */
       box.setInteractive();
       box.on('pointerdown', ()=>{
         RUN.player.deck.push(c);
@@ -921,12 +750,6 @@ class ShopScene extends Phaser.Scene {
       const box = RUN.renderCard(this, x, 260, 180, 140, o.card).cardBg;
       //this.add.text(x+70,230,`¥${o.price}`,{fontSize:12}).setOrigin(1,0);
       this.add.text(x,340,`¥${o.price}`,{fontSize:12}).setOrigin(1,0);
-      /*
-      const box = this.add.rectangle(x,260,180,140,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
-      this.add.text(x-70,230,o.card.name,{fontSize:14}).setOrigin(0);
-      this.add.text(x+70,230,`¥${o.price}`,{fontSize:12}).setOrigin(1,0);
-      this.add.text(x,260,o.card.text,{fontSize:12,wordWrap:{width:160}}).setOrigin(0.5);
-      */
       box.setInteractive();
       box.on('pointerdown', ()=>{
         if(RUN.gold < o.price) return;
