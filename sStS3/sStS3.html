@@ -29,6 +29,7 @@ const Util = {
   shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]] } return arr; },
   clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 };
+const debugMode = true;
 
 /* ---------- Game Data Templates ---------- */
 
@@ -150,6 +151,47 @@ class RunState {
     // カードをまとめて返す（削除や移動に使えるように）
     return { cardBg, nameText, costText, effectText };
   }
+
+  showDeckViewBtn(scene){
+    /*
+    const deckBtn = this.add.rectangle(900,150,200,40,0x2dcc70).setInteractive();
+    this.add.text(900,150,'デッキを見る', {fontSize:16}).setOrigin(0.5);
+    */
+    const deckBtn = scene.add.rectangle(1100,20,200,40,0x2dcc70).setInteractive();
+    scene.add.text(1100,20,'デッキを見る', {fontSize:16}).setOrigin(0.5);
+    deckBtn.on('pointerdown', ()=> this.showDeck(scene));
+  }
+  showDeck(scene){
+    const modal = scene.add.rectangle(600,360,700,420,0x000000,0.8).setDepth(10);
+    const close = scene.add.rectangle(600,620,100,40,0xff7777).setInteractive().setDepth(11);
+    const closeText = scene.add.text(600,620,'閉じる',{fontSize:16}).setOrigin(0.5).setDepth(11);
+    const deckTxt = scene.add.text(300,240,`デッキ:\n${this.player.deck.map(c=>c.name).join('\n')}\n\n所持レリック:\n${this.player.relics.map(r=>r.name).join(', ')||'なし'}`, {fontSize:14}).setDepth(11);
+    close.on('pointerdown', ()=>{ modal.destroy(); close.destroy(); closeText.destroy(); deckTxt.destroy(); });
+  }
+  showDiscardpileViewBtn(scene){
+    let x = 100, y = 700;
+    const deckBtn = scene.add.rectangle(x,y,200,40,0xff0000).setInteractive();
+    scene.add.text(x,y,'捨て札を見る', {fontSize:16}).setOrigin(0.5);
+    deckBtn.on('pointerdown', ()=> {
+      const modal = scene.add.rectangle(600,360,700,420,0x000000,0.8).setDepth(10);
+      const close = scene.add.rectangle(600,620,100,40,0xff7777).setInteractive().setDepth(11);
+      const closeText = scene.add.text(600,620,'閉じる',{fontSize:16}).setOrigin(0.5).setDepth(11);
+      const deckTxt = scene.add.text(300,240,`捨て札:\n${this.player.discard.map(c=>c.name).join('\n')}\n`, {fontSize:14}).setDepth(11);
+      close.on('pointerdown', ()=>{ modal.destroy(); close.destroy(); closeText.destroy(); deckTxt.destroy(); });
+    });
+  }
+  showDrawpileViewBtn(scene){
+    let x = 1100, y = 700;
+    const deckBtn = scene.add.rectangle(x,y,200,40,0x0070ff).setInteractive();
+    scene.add.text(x,y,'山札を見る', {fontSize:16}).setOrigin(0.5);
+    deckBtn.on('pointerdown', ()=> {
+      const modal = scene.add.rectangle(600,360,700,420,0x000000,0.8).setDepth(10);
+      const close = scene.add.rectangle(600,620,100,40,0xff7777).setInteractive().setDepth(11);
+      const closeText = scene.add.text(600,620,'閉じる',{fontSize:16}).setOrigin(0.5).setDepth(11);
+      const deckTxt = scene.add.text(300,240,`山札:\n${this.player.drawPile.map(c=>c.name).join('\n')}\n`, {fontSize:14}).setDepth(11);
+      close.on('pointerdown', ()=>{ modal.destroy(); close.destroy(); closeText.destroy(); deckTxt.destroy(); });
+    });
+  }
 }
 
 const RUN = new RunState();
@@ -199,12 +241,13 @@ class MapScene extends Phaser.Scene {
   //*
   constructor(){ super({key:'MapScene'}); }
   create(){
+    RUN.showDeckViewBtn(this);
     this.cameras.main.setBackgroundColor('#121212');
     this.add.text(30,20,'マップ', {fontSize:28});
     // If map not generated, generate
     if(RUN.map.length===0) this.generateMap();
     this.drawMap();
-    this.drawDebugMap();
+    if(debugMode) this.drawDebugMap();
     this.add.text(30,600,`金銭: ${RUN.gold}    HP: ${RUN.player.hp}/${RUN.player.maxHp}`, {fontSize:18});
     this.add.text(300,600,`Relics: ${RUN.player.relics.map(r=>r.name).join(', ')||'なし'}`, {fontSize:14});
   }
@@ -327,8 +370,13 @@ class MapScene extends Phaser.Scene {
     const remaining = RUN.map.filter(n=>!n.chosen).length;
     this.add.text(900,110,`残りステージ: ${remaining}`, {fontSize:14});
     // show deck button -> view deck
+    //RUN.showDeckViewBtn(this); // <- shift to above
+    /*
     const deckBtn = this.add.rectangle(900,150,200,40,0x2dcc70).setInteractive();
     this.add.text(900,150,'デッキを見る', {fontSize:16}).setOrigin(0.5);
+    deckBtn.on('pointerdown', ()=> RUN.showDeck(this));
+    //*/
+    /*
     deckBtn.on('pointerdown', ()=>{
       // simple deck modal using text
       let y = 200;
@@ -338,6 +386,7 @@ class MapScene extends Phaser.Scene {
       const deckTxt = this.add.text(300,240,`デッキ:\n${RUN.player.deck.map(c=>c.name).join('\n')}\n\n所持レリック:\n${RUN.player.relics.map(r=>r.name).join(', ')||'なし'}`, {fontSize:14}).setDepth(11);
       close.on('pointerdown', ()=>{ modal.destroy(); close.destroy(); closeText.destroy(); deckTxt.destroy(); });
     });
+    */
   }
   drawDebugMap(){
     this.add.text(30,300,'デバッグ用マップ', {fontSize:28});
@@ -501,6 +550,9 @@ class BattleScene extends Phaser.Scene {
     this.elite = data.elite;
   }
   create(){
+    RUN.showDeckViewBtn(this);
+    RUN.showDiscardpileViewBtn(this);
+    RUN.showDrawpileViewBtn(this);
     this.turn = 'player';
     this.messageText = this.add.text(600,40,'', {fontSize:18}).setOrigin(0.5);
     // Display player info area
@@ -727,18 +779,19 @@ class RewardScene extends Phaser.Scene {
   constructor(){ super({key:'RewardScene'}); }
   init(data){ this.gained = data.gold || 0; }
   create(){
+    RUN.showDeckViewBtn(this);
     this.selectCardGroup = this.add.group();
     this.selectCardGroup.clear(true,true);
     this.add.text(600,80,'戦闘勝利！ 報酬', {fontSize:26}).setOrigin(0.5);
     this.add.text(600,120,`ゴールド +${this.gained}`, {fontSize:18}).setOrigin(0.5);
     // show 3 random cards to choose from
     const choices = Util.shuffle(CARD_TEMPLATES).slice(0,3).map(c => JSON.parse(JSON.stringify(c)));
-    const selectCardText = this.add.text(200,200,'カードを選択してデッキに追加', {fontSize:18});
+    const selectCardText = this.add.text(450,200,'カードを選択してデッキに追加', {fontSize:18});
     this.selectCardGroup.add(selectCardText)
     for(let i=0;i<choices.length;i++){
       const c = choices[i];
-      const x = 200 + i*300;
-      const card = RUN.renderCard(this, x, 300, 240, 140, c);
+      const x = 300 + i*300;
+      const card = RUN.renderCard(this, x, 350, 240, 140, c);
       const box = card.cardBg;
       this.selectCardGroup.addMultiple([box,card.nameText,card.costText,card.effectText]);
       /*
@@ -766,13 +819,13 @@ class RewardScene extends Phaser.Scene {
     // Next: relic selection (unowned)
     this.relicChoices = Util.shuffle(RELIC_TEMPLATES.filter(r=>!RUN.relicIds.has(r.id))).slice(0,3);
     this.relicTexts = [];
-    this.add.text(600,300,'レリックを1つ選択（またはスキップ）', {fontSize:18}).setOrigin(0.5);
+    this.add.text(450,200,'レリックを1つ選択（またはスキップ）', {fontSize:18});
     for(let i=0;i<this.relicChoices.length;i++){
       const r = this.relicChoices[i];
-      const x = 250 + i*300;
-      const box = this.add.rectangle(x,440,240,120,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
-      this.add.text(x-100,420,r.name,{fontSize:14}).setOrigin(0);
-      this.add.text(x,440,r.desc,{fontSize:12,wordWrap:{width:200}}).setOrigin(0.5);
+      const x = 300 + i*300;
+      const box = this.add.rectangle(x,360,240,120,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
+      this.add.text(x-100,340,r.name,{fontSize:14}).setOrigin(0);
+      this.add.text(x,360,r.desc,{fontSize:12,wordWrap:{width:200}}).setOrigin(0.5);
       box.on('pointerdown', ()=> {
         RUN.applyRelic(r);
         this.finishRewards();
@@ -793,19 +846,20 @@ class RewardScene extends Phaser.Scene {
 class ChestScene extends Phaser.Scene {
   constructor(){ super({key:'ChestScene'}); }
   create(){
-    this.add.text(600,120,'宝箱！', {fontSize:28}).setOrigin(0.5);
+    RUN.showDeckViewBtn(this);
+    this.add.text(600,80,'宝箱！', {fontSize:28}).setOrigin(0.5);
     const goldGain = Math.floor(10 + Math.random()*30);
     RUN.gold += goldGain;
-    this.add.text(600,180,`ゴールド +${goldGain}`, {fontSize:18}).setOrigin(0.5);
+    this.add.text(600,120,`ゴールド +${goldGain}`, {fontSize:18}).setOrigin(0.5);
     // relics choices
     const relics = Util.shuffle(RELIC_TEMPLATES.filter(r=>!RUN.relicIds.has(r.id))).slice(0,3);
-    this.add.text(600,240,'レリックを1つ選択（またはスキップ）', {fontSize:18}).setOrigin(0.5);
+    this.add.text(450,200,'レリックを1つ選択（またはスキップ）', {fontSize:18});
     for(let i=0;i<relics.length;i++){
       const r = relics[i];
-      const x = 200 + i*300;
+      const x = 300 + i*300;
       const box = this.add.rectangle(x,360,240,140,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
-      this.add.text(x-100,320,r.name,{fontSize:14}).setOrigin(0);
-      this.add.text(x,360,r.desc,{fontSize:12,wordWrap:{width:200}}).setOrigin(0.5);
+      this.add.text(x-100,360,r.name,{fontSize:14}).setOrigin(0);
+      this.add.text(x,340,r.desc,{fontSize:12,wordWrap:{width:200}}).setOrigin(0.5);
       box.on('pointerdown', ()=> {
         RUN.applyRelic(r);
         this.scene.start('MapScene');
@@ -820,7 +874,8 @@ class ChestScene extends Phaser.Scene {
 /* RestScene */
 class RestScene extends Phaser.Scene {
   constructor(){ super({key:'RestScene'}); }
-  create(){
+  create(){    
+    RUN.showDeckViewBtn(this);
     this.add.text(600,120,'休憩', {fontSize:28}).setOrigin(0.5);
     // three choices: rest(heal), upgrade(random card), skip
     const restBtn = this.add.rectangle(300,320,240,100,0x77cc77).setInteractive();
@@ -853,20 +908,30 @@ class RestScene extends Phaser.Scene {
 class ShopScene extends Phaser.Scene {
   constructor(){ super({key:'ShopScene'}); }
   create(){
+    RUN.showDeckViewBtn(this);
     this.add.text(600,80,'ショップ', {fontSize:28}).setOrigin(0.5);
-    this.add.text(80,120,`ゴールド: ${RUN.gold}`, {fontSize:18});
+    this.goldText = this.add.text(80,120,`ゴールド: ${RUN.gold}`, {fontSize:18});
     // items: 5 random cards, 3 relics, delete card option(1)
     const cardOffers = Util.shuffle(CARD_TEMPLATES).slice(0,5).map(c=>({card:JSON.parse(JSON.stringify(c)), price: Math.floor(5 + Math.random()*8)}));
+    //const cardOffers = Util.shuffle(CARD_TEMPLATES).slice(0,5);
     for(let i=0;i<cardOffers.length;i++){
       const o = cardOffers[i];
       const x = 120 + i*200;
+      //const box = RUN.renderCard(this, x, 260, 180, 140, o).cardBg;
+      const box = RUN.renderCard(this, x, 260, 180, 140, o.card).cardBg;
+      //this.add.text(x+70,230,`¥${o.price}`,{fontSize:12}).setOrigin(1,0);
+      this.add.text(x,340,`¥${o.price}`,{fontSize:12}).setOrigin(1,0);
+      /*
       const box = this.add.rectangle(x,260,180,140,0x222222).setStrokeStyle(2,0xffffff).setInteractive();
       this.add.text(x-70,230,o.card.name,{fontSize:14}).setOrigin(0);
       this.add.text(x+70,230,`¥${o.price}`,{fontSize:12}).setOrigin(1,0);
       this.add.text(x,260,o.card.text,{fontSize:12,wordWrap:{width:160}}).setOrigin(0.5);
+      */
+      box.setInteractive();
       box.on('pointerdown', ()=>{
         if(RUN.gold < o.price) return;
         RUN.gold -= o.price;
+        this.goldText.setText(`ゴールド: ${RUN.gold}`, {fontSize:18});
         RUN.player.deck.push(o.card);
         box.fillColor = 0x444444;
       });
@@ -911,6 +976,7 @@ class ShopScene extends Phaser.Scene {
 class EventScene extends Phaser.Scene {
   constructor(){ super({key:'EventScene'}); }
   create(){
+    RUN.showDeckViewBtn(this);
     this.add.text(600,80,'イベント', {fontSize:28}).setOrigin(0.5);
     const events = [
       {id:'budget_cut', text:'企業がコスト削減を発表。金銭エナジー減少', effect:()=>{ RUN.player.maxEnergy.money = Math.max(1, RUN.player.maxEnergy.money-1); RUN.player.energy.money = Math.min(RUN.player.energy.money, RUN.player.maxEnergy.money); }},
