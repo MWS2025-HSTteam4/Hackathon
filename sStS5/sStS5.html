@@ -30,6 +30,41 @@ const Util = {
   clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 };
 const debugMode = true;
+//*
+function startBattle(Scene){
+  if(RUN.stageIndex < 5){
+    startBattle(Scene, false);
+  }else if(RUN.stageIndex == 9){
+    startBattle(Scene, 'boss');
+  }else{
+    startBattle(Scene, true);
+  }  
+}
+function startBattle(Scene, eliteFlag){
+  // prepare enemy from templates based on type & stage
+  let enemy;
+  if(eliteFlag==='boss') enemy = JSON.parse(JSON.stringify(Util.randChoice(ENEMY_TEMPLATES.boss)));
+  else if(eliteFlag===true) enemy = JSON.parse(JSON.stringify(Util.randChoice(ENEMY_TEMPLATES.elite)));
+  else enemy = JSON.parse(JSON.stringify(Util.randChoice(ENEMY_TEMPLATES.normal)));
+  // store battle state in RUN
+  RUN.currentEnemy = {
+    ...enemy,
+    hp: enemy.hp,
+    def: enemy.def,
+    intent: enemy.intent,
+    intentValue: enemy.intentValue,
+    tags: enemy.tags || []
+  };
+  // prepare player draw pile if empty
+  if(RUN.player.drawPile.length===0) RUN.player.drawPile = Util.shuffle(RUN.player.deck.slice());
+  // reset temporary player values
+  RUN.player.defense = 0;
+  //RUN.player.energy = RUN.player.maxEnergy;
+  RUN.player.status = {}; // status effects
+  Scene.scene.start('BattleScene', {elite: eliteFlag});
+}
+//*/
+
 
 /* ---------- Game Data Templates ---------- */
 
@@ -245,7 +280,8 @@ class MapScene extends Phaser.Scene {
       let confirmed = false;
       if(i===0) kind='enemy', confirmed=true;
       else if(i===4) kind='chest', confirmed=true;
-      else if(i===9) kind='boss', confirmed=true;
+      //else if(i===9) kind='boss', confirmed=true;
+      else if(i===9) kind='chest', confirmed=true;
       else kind = 'unknown';
       nodes.push({index:i+1, kind:kind, chosen:false, confirmed: confirmed});
     }
@@ -272,7 +308,7 @@ class MapScene extends Phaser.Scene {
         const y = baseY;
         const rect = this.add.rectangle(x, y, 80, 80, node.chosen?0x4444ff:0x333333).setStrokeStyle(2, 0xffffff);
         const t = this.add.text(x, y-8, `${node.index}`, {fontSize:16}).setOrigin(0.5);
-        const k = this.add.text(x, y+12, `${node.kind}`, {fontSize:12}).setOrigin(0.5);
+        //const k = this.add.text(x, y+12, `${node.kind}`, {fontSize:12}).setOrigin(0.5);
       } else {
         let selectable;
         if(node.confirmed){
@@ -297,16 +333,21 @@ class MapScene extends Phaser.Scene {
             }  
             //*/
           }
-          const k = this.add.text(x, y+12, `${kind}`, {fontSize:12}).setOrigin(0.5);
+          //const k = this.add.text(x, y+12, `${kind}`, {fontSize:12}).setOrigin(0.5);
           rect.on('pointerdown', ()=>{
             node.chosen = true;
             RUN.stageIndex = node.index;
             node.kind = kind;
             node.confirmed = true;
             // go to correct scene
+            /*
             if(node.kind==='enemy') this.startBattle(false);
             else if(node.kind==='elite') this.startBattle(true);
             else if(node.kind==='boss') this.startBattle('boss');
+            */
+            if(node.kind==='enemy') startBattle(this, false);
+            else if(node.kind==='elite') startBattle(this, true);
+            else if(node.kind==='boss') startBattle(this,'boss');
             else if(node.kind==='rest') this.scene.start('RestScene');
             else if(node.kind==='chest') this.scene.start('ChestScene');
             else if(node.kind==='shop') this.scene.start('ShopScene');
@@ -340,24 +381,20 @@ class MapScene extends Phaser.Scene {
         node.chosen = true;
         node.confirmed = true;
         // go to correct scene
+        /*
         if(node.kind==='enemy') this.startBattle(false);
         else if(node.kind==='elite') this.startBattle(true);
         else if(node.kind==='boss') this.startBattle('boss');
+        */
+        // startBattle関数を完全に外部化した
+        if(node.kind==='enemy') startBattle(this, false);
+        else if(node.kind==='elite') startBattle(this, true);
+        else if(node.kind==='boss') startBattle(this, 'boss');
         else if(node.kind==='rest') this.scene.start('RestScene');
         else if(node.kind==='chest') this.scene.start('ChestScene');
         else if(node.kind==='shop') this.scene.start('ShopScene');
         else if(node.kind==='event') this.scene.start('EventScene');
         });
-    }
-  }
-  // ShopSceneのstartBattle関数を引きたいが，普通にインスタンス化してないので無理やりやっている
-  // RunStateだけはインスタンス化しているため，そこに付帯しようと思ったが，sceneプロパティを扱えるのがextends Phaser.Sceneのクラスでないといけず，単純にextendsしてもコンストラクタあたりでエラーが出るため，妥協策
-  startBattle(eliteflag){
-    const shop = new ShopScene();
-    if(eliteflag != null){
-      shop.startBattle(eliteflag);
-    }else{
-      shop.startBattle();
     }
   }
 }
@@ -756,7 +793,7 @@ class ChestScene extends Phaser.Scene {
   constructor(){ super({key:'ChestScene'}); }
   create(){
     RUN.showDeckViewBtn(this);
-    this.add.text(600,80,'特別収入！', {fontSize:28}).setOrigin(0.5);
+    this.add.text(600,80,'特別手当！', {fontSize:28}).setOrigin(0.5);
     const goldGain = Math.floor(10 + Math.random()*30);
     RUN.player.gold += goldGain;
     this.add.text(600,120,`資金 +${goldGain}`, {fontSize:18}).setOrigin(0.5);
@@ -878,12 +915,14 @@ class ShopScene extends Phaser.Scene {
 
     const leave = this.add.rectangle(600,680,160,40,0x666666).setInteractive();
     this.add.text(600,680,'店を出る', {fontSize:16}).setOrigin(0.5);
-    leave.on('pointerdown', ()=> this.startBattle());
+    //leave.on('pointerdown', ()=> this.startBattle());
+    leave.on('pointerdown', ()=> startBattle(this));
   }
+  /*
   startBattle(){
-    if(this.stageIndex < 5){
+    if(RUN.stageIndex < 5){
       this.startBattle(false);
-    }else if(this.stageIndex == 9){
+    }else if(RUN.stageIndex == 9){
       this.startBattle('boss');
     }else{
       this.startBattle(true);
