@@ -212,6 +212,37 @@ class RunState {
       close.on('pointerdown', ()=>{ modal.destroy(); close.destroy(); closeText.destroy(); deckTxt.destroy(); });
     });
   }
+  showPlayerStatusChangeST(scene, st){
+    return this.showPlayerStatus(scene,30,10,18,st,this.formatMoney(),this.formatPassive());
+  }
+  showPlayerStatusChangeMT(scene, mt){
+    return this.showPlayerStatus(scene,30,10,18,this.formatStatus(),mt,this.formatPassive());
+  }
+  showPlayerStatusChangePT(scene, pt){
+    return this.showPlayerStatus(scene,30,10,18,this.formatStatus(),this.formatMoney(),pt);
+  }
+  showPlayerStatus(scene, x=30, y=10, pix=18, st=this.formatStatus(), mt=this.formatMoney(), pt=this.formatPassive()){
+    /*
+    const statusText = scene.add.text(30,600,`HP: ${RUN.player.hp}/${RUN.player.maxHp}    資金: ${RUN.player.gold}, 予算: ${RUN.budget}`, {fontSize:18});
+    const passiveText = scene.add.text(30,620,`機材・スキル: ${RUN.player.relics.map(r=>r.name).join(', ')||'なし'}`, {fontSize:14});
+    */
+    //const statusText = scene.add.text(x,y,`HP: ${RUN.player.hp}/${RUN.player.maxHp}  人手: ${RUN.player.energy}/${RUN.player.maxEnergy}  `, {fontSize:pix});
+    const statusText = scene.add.text(x,y,st, {fontSize:pix});
+    const moneyText = scene.add.text(x,y+20,mt, {fontSize:pix});
+    const passiveText = scene.add.text(x,y+40,pt, {fontSize:pix});
+    return { statusText, moneyText, passiveText }
+  }
+  formatStatus(){
+    const p = RUN.player;
+    return `HP: ${p.hp}/${p.maxHp}  人手: ${p.energy}/${p.maxEnergy}  `;
+  }
+  formatMoney(){
+    return `資金: ${RUN.player.gold}, 予算: ${RUN.budget}`;
+  }
+  formatPassive(){
+    return   `機材・スキル: ${RUN.player.relics.map(r=>r.name).join(', ')||'なし'}`;
+  }
+
 }
 
 const RUN = new RunState();
@@ -249,10 +280,12 @@ class OpeningScene extends Phaser.Scene {
       RUN.player.drawPile = Util.shuffle(RUN.player.deck.slice());
       this.scene.start('MapScene');
     });
-    // show sample run info
-    this.add.text(60,560,'仕様メモ（プロトタイプ）', {fontSize:14});
-    this.add.text(60,590,'- 3種類エナジー: 金銭/労働力/時間', {fontSize:12});
-    this.add.text(60,610,'- 10ステージ マップ生成 -> 選択 -> イベント/敵/休憩等', {fontSize:12});
+    if(debugMode){
+      // show sample run info
+      this.add.text(60,560,'仕様メモ（プロトタイプ）', {fontSize:14});
+      this.add.text(60,590,'- 3種類エナジー: 金銭/労働力/時間', {fontSize:12});
+      this.add.text(60,610,'- 10ステージ マップ生成 -> 選択 -> イベント/敵/休憩等', {fontSize:12});
+    }
   }
 }
 
@@ -261,15 +294,18 @@ class MapScene extends Phaser.Scene {
   //*
   constructor(){ super({key:'MapScene'}); }
   create(){
+    /*
+    const statusText = scene.add.text(30,600,`HP: ${RUN.player.hp}/${RUN.player.maxHp}    資金: ${RUN.player.gold}, 予算: ${RUN.budget}`, {fontSize:18});
+    const passiveText = scene.add.text(30,620,`機材・スキル: ${RUN.player.relics.map(r=>r.name).join(', ')||'なし'}`, {fontSize:14});
+    */
+    RUN.showPlayerStatus(this);
     RUN.showDeckViewBtn(this);
     this.cameras.main.setBackgroundColor('#121212');
-    this.add.text(30,20,'マップ', {fontSize:28});
+    this.add.text(30,100,'マップ', {fontSize:28});
     // If map not generated, generate
     if(RUN.map.length===0) this.generateMap();
     this.drawMap();
     if(debugMode) this.drawDebugMap();
-    this.add.text(30,600,`資金: ${RUN.player.gold}, 予算: ${RUN>RUN.budget}    HP: ${RUN.player.hp}/${RUN.player.maxHp}`, {fontSize:18});
-    this.add.text(300,600,`Relics: ${RUN.player.relics.map(r=>r.name).join(', ')||'なし'}`, {fontSize:14});
   }
 
   generateMap(){
@@ -723,6 +759,7 @@ class RewardScene extends Phaser.Scene {
   constructor(){ super({key:'RewardScene'}); }
   init(data){ this.gained = data.gold || 0; }
   create(){
+    RUN.showPlayerStatus(this);
     RUN.showDeckViewBtn(this);
     this.selectCardGroup = this.add.group();
     this.selectCardGroup.clear(true,true);
@@ -792,6 +829,7 @@ class RewardScene extends Phaser.Scene {
 class ChestScene extends Phaser.Scene {
   constructor(){ super({key:'ChestScene'}); }
   create(){
+    RUN.showPlayerStatus(this);
     RUN.showDeckViewBtn(this);
     this.add.text(600,80,'特別手当！', {fontSize:28}).setOrigin(0.5);
     const goldGain = Math.floor(10 + Math.random()*30);
@@ -822,6 +860,7 @@ class ChestScene extends Phaser.Scene {
 class RestScene extends Phaser.Scene {
   constructor(){ super({key:'RestScene'}); }
   create(){    
+    RUN.showPlayerStatus(this);
     RUN.showDeckViewBtn(this);
     this.add.text(600,120,'休憩', {fontSize:28}).setOrigin(0.5);
     // three choices: rest(heal), upgrade(random card), skip
@@ -861,7 +900,10 @@ class ShopScene extends Phaser.Scene {
   create(){
     RUN.showDeckViewBtn(this);
     this.add.text(600,80,'ショップ', {fontSize:28}).setOrigin(0.5);
-    this.goldText = this.add.text(80,120,`資金: ${RUN.player.gold}`, {fontSize:18});
+    RUN.player.gold += RUN.budget;
+    //RUN.showPlayerStatus(this);
+    //this.goldText = this.add.text(80,120,`資金: ${RUN.player.gold} (予算獲得: +${RUN.budget})`, {fontSize:18});
+    this.goldText = RUN.showPlayerStatusChangeMT(this, `資金: ${RUN.player.gold} (予算獲得: +${RUN.budget})`).moneyText;
     // items: 5 random cards, 3 relics, delete card option(1)
     const cardOffers = Util.shuffle(CARD_TEMPLATES).slice(0,5).map(c=>({card:JSON.parse(JSON.stringify(c)), price: Math.floor(5 + Math.random()*8)}));
     //const cardOffers = Util.shuffle(CARD_TEMPLATES).slice(0,5);
@@ -959,6 +1001,7 @@ class ShopScene extends Phaser.Scene {
 class EventScene extends Phaser.Scene {
   constructor(){ super({key:'EventScene'}); }
   create(){
+    RUN.showPlayerStatus(this);
     RUN.showDeckViewBtn(this);
     this.add.text(600,80,'イベント', {fontSize:28}).setOrigin(0.5);
     const events = [
