@@ -280,7 +280,8 @@ class MapScene extends Phaser.Scene {
       let confirmed = false;
       if(i===0) kind='enemy', confirmed=true;
       else if(i===4) kind='chest', confirmed=true;
-      else if(i===9) kind='boss', confirmed=true;
+      //else if(i===9) kind='boss', confirmed=true;
+      else if(i===9) kind='chest', confirmed=true;
       else kind = 'unknown';
       nodes.push({index:i+1, kind:kind, chosen:false, confirmed: confirmed});
     }
@@ -307,7 +308,7 @@ class MapScene extends Phaser.Scene {
         const y = baseY;
         const rect = this.add.rectangle(x, y, 80, 80, node.chosen?0x4444ff:0x333333).setStrokeStyle(2, 0xffffff);
         const t = this.add.text(x, y-8, `${node.index}`, {fontSize:16}).setOrigin(0.5);
-        const k = this.add.text(x, y+12, `${node.kind}`, {fontSize:12}).setOrigin(0.5);
+        //const k = this.add.text(x, y+12, `${node.kind}`, {fontSize:12}).setOrigin(0.5);
       } else {
         let selectable;
         if(node.confirmed){
@@ -332,7 +333,7 @@ class MapScene extends Phaser.Scene {
             }  
             //*/
           }
-          const k = this.add.text(x, y+12, `${kind}`, {fontSize:12}).setOrigin(0.5);
+          //const k = this.add.text(x, y+12, `${kind}`, {fontSize:12}).setOrigin(0.5);
           rect.on('pointerdown', ()=>{
             node.chosen = true;
             RUN.stageIndex = node.index;
@@ -792,7 +793,7 @@ class ChestScene extends Phaser.Scene {
   constructor(){ super({key:'ChestScene'}); }
   create(){
     RUN.showDeckViewBtn(this);
-    this.add.text(600,80,'特別収入！', {fontSize:28}).setOrigin(0.5);
+    this.add.text(600,80,'特別手当！', {fontSize:28}).setOrigin(0.5);
     const goldGain = Math.floor(10 + Math.random()*30);
     RUN.player.gold += goldGain;
     this.add.text(600,120,`資金 +${goldGain}`, {fontSize:18}).setOrigin(0.5);
