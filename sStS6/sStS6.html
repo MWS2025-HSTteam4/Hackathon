@@ -96,10 +96,11 @@ const ENEMY_TEMPLATES = {
 
 // Relic templates
 const RELIC_TEMPLATES = [
-  {id:'inc_budget', name:'予算増額', desc:'予算の量を追加', effect:(player)=>{RUN.budget += 10;}},
-  {id:'team_hire', name:'臨時要員', desc:'労働力最大+1', effect:(player)=>{player.maxEnergy.labor++; player.energy.labor++;}},
-  {id:'automation', name:'自動化ツール', desc:'1t経過したとして', effect:(player)=>{}},
-  {id:'network_expert', name:'ネットワーク専門家', desc:'networkシナジーカードの防御効果+50%', effect:null},
+  {id:'inc_budget', name:'予算増額', desc:'予算の量を追加', effect:()=>{RUN.budget += 10;}},
+  //{id:'team_hire', name:'臨時要員', desc:'労働力最大+1', effect:(player)=>{player.maxEnergy.labor++; player.energy.labor++;}},
+  {id:'team_hire', name:'臨時要員', desc:'労働力最大+1', effect:()=>{RUN.player.maxEnergy.labor++; RUN.player.energy.labor++;}},
+  {id:'automation', name:'自動化ツール', desc:'次回業務時,適用待ちの効果を\n1t経過した状態で開始する', effect:()=>{}},
+  {id:'network_expert', name:'ネットワーク専門家', desc:'networkシナジーカードの防御効果向上', effect:null},
 ];
 
 /* ---------- Game State (persistent across scenes during one run) ---------- */
@@ -474,13 +475,15 @@ class BattleScene extends Phaser.Scene {
     RUN.showBtns(this,true,true,true,true,false);
     //RUN.showDeckViewBtn(this);
     //RUN.showDiscardpileViewBtn(this);
-    //RUN.showDrawpileViewBtn(this);
+    //RUN.showDrawpileViewBtn(this);    
     this.turn = 'player';
-    this.messageText = this.add.text(600,40,'', {fontSize:18}).setOrigin(0.5);
+    this.countTurn = 0;
+    this.turnText = this.add.text(600,40,'Turn 1', {fontSize:18}).setOrigin(0.5);
+    this.messageText = this.add.text(600,60,'', {fontSize:18}).setOrigin(0.5);
     // Display player info area
     this.playerInfo = this.add.text(30,30,this.formatPlayer(), {fontSize:16});
     // Enemy info
-    this.enemyInfo = this.add.text(880,30,this.formatEnemy(), {fontSize:16});
+    if(debugMode) this.enemyInfo = this.add.text(880,30,this.formatEnemy(), {fontSize:16});
     // card area
     this.cardGroup = this.add.group();
     this.applyWaitsGroup = this.add.group();
@@ -503,6 +506,7 @@ class BattleScene extends Phaser.Scene {
 
   startPlayerTurn(){
     this.turn='player';
+    this.turnText.setText(`Turn ${++this.countTurn}`);
     this.messageText.setText('あなたのターン');
     // reset player defense to 0 per spec
     //RUN.player.defense = 0;
@@ -533,7 +537,7 @@ class BattleScene extends Phaser.Scene {
   renderHand(){
     // clear previous
     this.cardGroup.clear(true,true);
-    const startX = 140;
+    const startX = 200;
     const y = 480;
     for(let i=0;i<this.hand.length;i++){
       const card = this.hand[i];
@@ -605,8 +609,8 @@ class BattleScene extends Phaser.Scene {
     // reset enemy defense to 0
     e.def = Math.max(0, e.def);
     // apply intent
-    this.messageText.setText(`敵のターン: ${e.name} が ${e.intent} を実行`);
-    if(e.intent === 'attack'){
+    if(debugMode) this.messageText.setText(`敵のターン: ${e.name} が ${e.intent} を実行`);
+    if(e.intent === 'attack' && e.hp > 0){
       let dmg = e.intentValue;
       // check player defense
       if(dmg <= RUN.player.defense){
@@ -626,7 +630,11 @@ class BattleScene extends Phaser.Scene {
     //*/
     // compute next intent (random small)
     e.intentValue = Math.max(3, e.intentValue + Util.randChoice([-2,0,1]));
-    e.intent = Util.randChoice(['attack','attack','attack','weaken']); // bias attack
+    if(e.hp > 0){
+      e.intent = Util.randChoice(['attack','attack','attack','weaken']); // bias attack
+    }else{
+      e.intent = 'nothing';
+    }
     // if next is weaken, intentValue reduces player's max energy next turn? We'll show as hint
     e.intentDisplay = e.intent;
     // check player death
@@ -641,14 +649,18 @@ class BattleScene extends Phaser.Scene {
       // proceed to next player turn
       this.scene.resume();
       // if enemy still alive, start player turn
+      /*
       if(RUN.currentEnemy.hp>0) this.startPlayerTurn();
       else this.onEnemyDefeated();
+      */
+      if(this.countTurn > 3) this.onEnemyDefeated();
+      else this.startPlayerTurn();
     });
   }
 
   updateInfo(){
     this.playerInfo.setText(this.formatPlayer());
-    this.enemyInfo.setText(this.formatEnemy());
+    if(debugMode) this.enemyInfo.setText(this.formatEnemy());
   }
 
   onEnemyDefeated(){
@@ -660,15 +672,18 @@ class BattleScene extends Phaser.Scene {
       this.scene.start('GameOverScene', {victory:true});
       return;
     }
+    /*
     // grant gold: simple formula
     const gained = Math.floor(10 + (this.elite?10:0) + Math.random()*10);
     RUN.player.gold += gained;
+    */
     // put remaining discard/draw into RUN.player.discard
     RUN.player.discard = RUN.player.discard.concat(this.hand || []);
     // clear currentEnemy
     delete RUN.currentEnemy;
     // go to reward scene
-    this.scene.start('RewardScene', {gold:gained});
+    //this.scene.start('RewardScene', {gold:gained});
+    this.scene.start('RewardScene');
   }
 
   delayApplyEffects(){
@@ -910,7 +925,7 @@ class RestScene extends Phaser.Scene {
     });
 
     const upgradeBtn = this.add.rectangle(600,320,240,100,0x7799ff).setInteractive();
-    this.add.text(600,320,'強化: デッキのカード強化', {fontSize:18}).setOrigin(0.5);
+    this.add.text(600,320,'強化: デッキの施策強化', {fontSize:18}).setOrigin(0.5);
     upgradeBtn.on('pointerdown', ()=> {
       if(RUN.player.deck.length===0) { this.scene.start('MapScene'); return; }
       const toUpgrade = Util.randChoice(RUN.player.deck);
@@ -918,7 +933,8 @@ class RestScene extends Phaser.Scene {
       if(toUpgrade.defense) toUpgrade.defense = Math.ceil(toUpgrade.defense*1.5);
       if(toUpgrade.heal) toUpgrade.heal = Math.ceil(toUpgrade.heal*1.5);
       if(toUpgrade.damageToVuln) toUpgrade.damageToVuln = Math.ceil(toUpgrade.damageToVuln*1.5);
-      this.add.text(600,430,`${toUpgrade.name} を強化しました`, {fontSize:14});
+      toUpgrade.name = toUpgrade.name+"+";
+      this.add.text(600,430,`強化： ${toUpgrade.name} を得た`, {fontSize:14});
       this.time.delayedCall(1000, ()=> this.endRestScene());
     });
 
@@ -1047,7 +1063,7 @@ class EventScene extends Phaser.Scene {
     const events = [
       {id:'budget_cut', text:'企業がコスト削減を発表。金銭エナジー減少', effect:()=>{ RUN.player.gold = Math.max(1, RUN.player.gold-1);} },
       {id:'investment', text:'投資が入り、金銭を獲得', effect:()=>{ RUN.player.gold += 20; }},
-      {id:'insider', text:'内部不正が発生！労働リソースが減少', effect:()=>{ RUN.player.maxEnergy--; RUN.player.energy--; }},
+      {id:'insider', text:'内部不正を発見！人手が減少', effect:()=>{ RUN.player.maxEnergy--; RUN.player.energy--; }},
       {id:'policy', text:'ポリシー刷新で一時的バフ', effect:()=>{ RUN.player.defense += 6; }},
       {id:'zero_day_found', text:'ゼロデイを発見！だが調査に時間が必要', effect:()=>{ RUN.player.energy -= 1; RUN.player.applyEffectWaiting.push({leftTime: 3, card: { id:'event', name:'Duel Zero Day Vulnerability', cost:{money:1,labor:1,time:0}, text:'ゼロデイ脆弱性対応', synergy:'vulnerability' }}); }}
     ];
