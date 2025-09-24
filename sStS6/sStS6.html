@@ -30,6 +30,7 @@ const Util = {
   clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 };
 const debugMode = true;
+let debugIndex = 0;
 //*
 function startBattle(Scene){
   if(RUN.stageIndex < 5){
@@ -77,6 +78,45 @@ const CARD_TEMPLATES = [
   { id:'train', name:'Employee Training', cost:{money:0,labor:2,time:0}, buffDefense:4, text:'次ターン防御+4 (human)', synergy:'human' },
   { id:'audit', name:'Security Audit', cost:{money:1,labor:1,time:1}, debuffEnemy:2, text:'敵防御-2 (policy)', synergy:'policy' }
 ];
+const EVENT_CARD_TEMPLATES = [
+  { id:'incident', name:'インシデント対応', cost:{money:1,labor:1,time:0}, text:'', synergy:'incident', instant: true, must: true },
+  { id:'accident', name:'障害対応（原因究明）', cost:{money:1,labor:1,time:0}, text:'', synergy:'accident', instant: true, must: true },
+  { id:'accident', name:'障害対応（原因対処）', cost:{money:1,labor:1,time:0}, text:'', synergy:'accident', instant: true},
+  { id:'customer', name:'顧客対応', cost:{money:1,labor:1,time:0}, text:'1/2で信頼向上し,HP回復', synergy:'customer', instant:true, must: true },
+  { id:'recruit_allies', name:'イベント（仲間を募集；長期育成）', cost:{money:1,labor:2,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'united_we_stand', name:'イベント（団結は力なり；情報交換を活発化）', cost:{labor:1,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'secure_partnership', name:'イベント（安全な提携；共同研究を開始）', cost:{labor:1,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'supply_chain_attack', name:'イベント（禍福を共に；即時調査）', cost:{labor:2,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'careless_member', name:'イベント（不注意な仲間；対応チームを派遣）', cost:{labor:1,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'temptation', name:'イベント（抗いがたい誘惑；隔離して修復）', cost:{labor:1,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'inappropriate', name:'イベント（一体何を；即復旧作業）', cost:{labor:2,time:2}, text:'実行中', synergy:'', instant:true},
+  { id:'leak_darkweb', name:'イベント（泣きっ面に蜂；公的機関に通報）', cost:{labor:1,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'stolen_redteam', name:'イベント（レッドチームツールが盗まれた；早急にパッチ対応）', cost:{labor:2,time:2}, text:'実行中', synergy:'', instant:true},
+  { id:'stolen_redteam', name:'イベント（レッドチームツールが盗まれた；外部へ注意喚起）', cost:{labor:1,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'fake_security', name:'イベント（真贋の見分けがつかない製品；調査して導入保留）', cost:{labor:1,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'law', name:'イベント（情報セキュリティ管理法；法対応の仕組み導入）', cost:{money:1,labor:1,time:2}, text:'実行中', synergy:'', instant:true},
+  { id:'gdpr', name:'イベント（GDPRの正式発効；GDPR準拠体制を導入）', cost:{money:2,labor:1,time:2}, text:'実行中', synergy:'', instant:true},
+  { id:'taiwan_policy', name:'イベント（資安即国安；政府方針に従う）', cost:{labor:1,time:2}, text:'実行中', synergy:'', instant:true},
+  { id:'contest_app', name:'イベント（アプリケーション保護コンテスト；全力参加）', cost:{labor:2,time:2}, text:'実行中', synergy:'', instant:true},
+  { id:'contest_app', name:'イベント（アプリケーション保護コンテスト；参加する）', cost:{labor:1,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'contest_device', name:'イベント（デバイス保護コンテスト；全力参加）', cost:{labor:2,time:2}, text:'実行中', synergy:'', instant:true},
+  { id:'contest_device', name:'イベント（デバイス保護コンテスト；参加する）', cost:{labor:1,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'contest_data', name:'イベント（データ保護コンテスト；全力参加）', cost:{labor:2,time:2}, text:'実行中', synergy:'', instant:true},
+  { id:'contest_data', name:'イベント（データ保護コンテスト；参加する）', cost:{labor:1,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'meltdown', name:'イベント（Meltdown脆弱性発生；緊急修正）', cost:{labor:3,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'meltdown', name:'イベント（Meltdown脆弱性発生；後日修正）', cost:{labor:1,time:2}, text:'実行中', synergy:'', instant:true},
+  { id:'eternalblue', name:'イベント（EternalBlue脆弱性発生；緊急修正）', cost:{labor:3,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'eternalblue', name:'イベント（EternalBlue脆弱性発生；後日修正）', cost:{labor:1,time:2}, text:'実行中', synergy:'', instant:true},
+  { id:'shellshock', name:'イベント（ShellShock脆弱性発生；緊急修正）', cost:{labor:3,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'shellshock', name:'イベント（ShellShock脆弱性発生；後日修正）', cost:{labor:1,time:2}, text:'実行中', synergy:'', instant:true},
+  { id:'spectre', name:'イベント（Spectre脆弱性発生；緊急修正）', cost:{labor:3,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'spectre', name:'イベント（Spectre脆弱性発生；後日修正）', cost:{labor:1,time:2}, text:'実行中', synergy:'', instant:true},
+  { id:'heartbleed', name:'イベント（HeartBleed脆弱性発生；緊急修正）', cost:{labor:3,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'heartbleed', name:'イベント（HeartBleed脆弱性発生；後日修正）', cost:{labor:1,time:2}, text:'実行中', synergy:'', instant:true},
+  { id:'zerologon', name:'イベント（Zerologon脆弱性発生；緊急修正）', cost:{labor:3,time:1}, text:'実行中', synergy:'', instant:true},
+  { id:'zerologon', name:'イベント（Zerologon脆弱性発生；後日修正）', cost:{labor:1,time:2}, text:'実行中', synergy:'', instant:true},
+];
+
 
 // Enemy templates (concept + ATT&CK-like theme)
 const ENEMY_TEMPLATES = {
@@ -94,13 +134,193 @@ const ENEMY_TEMPLATES = {
   ]
 };
 
+const EVENT_TEMPLATES = [
+  /*
+  {id:'budget_cut', text:'企業がコスト削減を発表。金銭エナジー減少', effect:()=>{ RUN.player.gold = Math.max(1, RUN.player.gold-1);} },
+  {id:'investment', text:'投資が入り、金銭を獲得', effect:()=>{ RUN.player.gold += 20; }},
+  {id:'insider', text:'内部不正を発見！人手が減少', effect:()=>{ RUN.player.maxEnergy--; RUN.player.energy--; }},
+  {id:'policy', text:'ポリシー刷新で一時的バフ', effect:()=>{ RUN.player.defense += 6; }},
+  {id:'zero_day_found', text:'ゼロデイを発見！だが調査に時間が必要', effect:()=>{ RUN.player.energy -= 1; RUN.player.applyEffectWaiting.push({leftTime: 3, card: { id:'event', name:'Duel Zero Day Vulnerability', cost:{money:1,labor:1,time:0}, text:'ゼロデイ脆弱性対応', synergy:'vulnerability' }}); }},
+  */
+  // 良いイベント
+  {id:'recruit_allies', title:'仲間を募集', text:'', tag: 'good', choices:[
+    {option:'高給で競合他社の優秀な人材を即戦力として採用', effect:()=>{ return {labor:+2, money:-2, trust:+1}; }},
+    {option:'新人を雇う．研修を行い長期育成', effect:()=>{ return {labor:+2, money:-1, time:-1, trust:+2, card:EVENT_CARD_TEMPLATES[4]}; }},
+    {option:'募集しない', effect:()=>{ return {}; }}
+  ]},
+  {id:'united_we_stand', title:'団結は力なり', text:'業界団体に加入し、協力体制を強化した！', tag: 'good', choices:[
+    //{option:'加入費を支払う', effect:()=>{ return {money:-1, trust:+2}; }},
+    {option:'情報交換を活発化', effect:()=>{ return {labor:-1, time:-1, trust:+3, card:EVENT_CARD_TEMPLATES[5]}; }},
+    {option:'人材活用術を習う', effect:()=>{ return {labor:+1}; }}
+  ]},
+  {id:'iso_cert', title:'ISO27001に合格', text:'情報セキュリティマネジメント国際規格に認定！', tag: 'good', choices:[
+    {option:'信頼を得られるように，広報してアピール', effect:()=>{ return {trust:+3}; }},
+    {option:'収益に繋がるように，広報してアピール', effect:()=>{ return {money:+1}; }},
+    {option:'採用に繋がるように，広報してアピール', effect:()=>{ return {labor:+1}; }}
+  ]},
+  {id:'bug_bounty', title:'BugBounty', text:'脆弱性報奨金制度を導入！', tag: 'good', choices:[
+    {option:'導入する', effect:()=>{ return {money:-2}; }},
+    {option:'何もしない', effect:()=>{ return {}; }}
+    /*
+    {option:'すぐ修正に取り組む', effect:()=>{ return {labor:-1, time:-1, money:-1, trust:+2}; }},
+    {option:'報酬を増額', effect:()=>{ return {money:-2, trust:+3}; }}
+    */
+  ]},
+  {id:'profit_security', title:'情報セキュリティで大儲け', text:'長年の投資が実り顧客信頼UP！', tag: 'good', choices:[
+    {option:'配当を出す', effect:()=>{ return {money:+3, trust:+1}; }},
+    {option:'再投資', effect:()=>{ return {money:+1, trust:+2}; }}
+  ]},
+  {id:'ai_defense', title:'AI防御システム', text:'AIベースの防御システムを導入する？', tag: 'good', choices:[
+    {option:'高額だが導入', effect:()=>{ return {money:-2, trust:+3}; }},
+    {option:'試験導入のみ', effect:()=>{ return {money:-1, trust:+1}; }}
+  ]},
+  {id:'secure_partnership', title:'安全な提携', text:'セキュリティ意識の高い企業と提携！', tag: 'good', choices:[
+    {option:'共同研究を開始', effect:()=>{ return {labor:-1, time:-1, trust:+3, card:EVENT_CARD_TEMPLATES[6]}; }},
+    {option:'能力獲得を相互支援', effect:()=>{ return {labor:+1}; }}
+  ]},
+  {id:'academic_collab', title:'大学と共同研究', text:'大学とセキュリティ分野で共同研究！', tag: 'good', choices:[
+    {option:'研究に資金提供', effect:()=>{ return {money:-2, labor:+1}; }}
+    //{option:'', effect:()=>{ return {labor:-2, trust:+2}; }}
+  ]},
+  {id:'fast_response', title:'迅速な対応', text:'インシデント対応の迅速さが評価された！', tag: 'good', choices:[
+    {option:'社内で士気向上', effect:()=>{ return {labor:+1, trust:+2}; }}
+  ]},
+  {id:'client_contract', title:'大口契約獲得', text:'大手企業との契約を獲得！', tag: 'good', choices:[
+    {option:'短期契約（一時的資金）', effect:()=>{ return {money:+3, trust:+2}; }}
+    {option:'長期契約（予算増額）', effect:()=>{ return {budget:+5, trust:+2}; }}
+  ]},
+  {id:'security_awareness', title:'従業員意識向上', text:'セキュリティ教育が成功し従業員の意識がUP！', tag: 'good', choices:[
+    //{option:'教育継続', effect:()=>{ return {time:-1, labor:+2, trust:+2}; }},
+    {option:'教育継続', effect:()=>{ return {labor:+1, trust:+2}; }}
+  ]},
+  {id:'cyber_insurance', title:'サイバー保険導入', text:'保険によるリスク分散を実現できる', tag: 'good', choices:[
+    {option:'高額保険に加入', effect:()=>{ return {money:-2, trust:+3}; }},
+    {option:'最低限の保険に加入', effect:()=>{ return {money:-1, trust:+1}; }}
+    {option:'何もしない', effect:()=>{ return {trust:-2}; }}
+  ]},
+  {id:'global_expansion', title:'海外進出成功', text:'海外市場でセキュリティ強化が評価された！', tag: 'good', choices:[
+    {option:'現地法人を設立', effect:()=>{ return {money:-3, trust:+4}; }},
+    {option:'人材を派遣する', effect:()=>{ return {labor:-1, money:+2, trust:+2}; }},
+    {option:'何もしない', effect:()=>{ return {trust:+1}; }},
+  ]},
+  // ===== 問題発生 =====
+  {id:'supply_chain_attack', title:'禍福を共に', text:'サプライチェーン上流が侵入された！', tag: 'bad', choices:[
+    {option:'即時調査', effect:()=>{ return {labor:-2, time:-1, trust:-2, card:EVENT_CARD_TEMPLATES[7]}; }},
+    {option:'外部コンサル依頼', effect:()=>{ return {money:-2, trust:-1}; }}
+  ]},
+  {id:'careless_member', title:'不注意な仲間', text:'PCを紛失し機密情報漏洩の危機！', tag: 'bad', choices:[
+    {option:'対応チームを派遣', effect:()=>{ return {labor:-1, time:-1, trust:-2, card:EVENT_CARD_TEMPLATES[8]}; }},
+    {option:'放置（隠蔽）', effect:()=>{ return {trust:-4}; }}
+  ]},
+  {id:'hidden_truth', title:'隠された真実', text:'ランサム被害が発生！評判が低下…', tag: 'bad', choices:[
+    {option:'公表する', effect:()=>{ return {trust:-2, money:-5}; }},
+    {option:'隠蔽する', effect:()=>{ return {trust:-4}; }}
+  ]},
+  {id:'temptation', title:'抗いがたい誘惑', text:'メールのリンクをクリックして感染！', tag: 'bad', choices:[
+    {option:'隔離して修復', effect:()=>{ return {labor:-1, time:-1, trust:-1, card:EVENT_CARD_TEMPLATES[9]}; }}
+  ]},
+  {id:'inappropriate', title:'一体何を', text:'就業中にアダルトサイト閲覧→システム停止！', tag: 'bad', choices:[
+    {option:'従業員を処分', effect:()=>{ return {labor:-1, trust:-1}; }},
+    {option:'即復旧作業', effect:()=>{ return {labor:-2, time:-2, trust:-2, card:EVENT_CARD_TEMPLATES[10]}; }}
+  ]},
+  {id:'hire_hacker', title:'目にもの見せてやる', text:'ハッカーを雇って競合を攻撃！', tag: 'bad', choices:[
+    {option:'強行する', effect:()=>{ return {trust:-4, money:-2}; }},
+    {option:'踏みとどまる', effect:()=>{ return {trust:+1}; }}
+  ]},
+  {id:'leak_darkweb', title:'泣きっ面に蜂', text:'重要情報がダークウェブで販売！', tag: 'bad', choices:[
+    {option:'弁護士を雇う', effect:()=>{ return {money:-2, trust:-2}; }},
+    {option:'公的機関に通報', effect:()=>{ return {labor:-1, time:-1, trust:-1, card:EVENT_CARD_TEMPLATES[11]}; }}
+  ]},
+  {id:'stolen_redteam', title:'レッドチームツールが盗まれた', text:'攻撃手法が世界に拡散！', tag: 'bad', choices:[
+    {option:'早急にパッチ対応', effect:()=>{ return {labor:-2, time:-2, card:EVENT_CARD_TEMPLATES[12]}; }},
+    {option:'外部へ注意喚起', effect:()=>{ return {labor:-1, time:-1, trust:-2, card:EVENT_CARD_TEMPLATES[13]}; }}
+  ]},
+  {id:'fake_security', title:'真贋の見分けがつかない製品', text:'偽造セキュリティ製品を導入か！？', tag: 'bad', choices:[
+    {option:'調査して導入保留', effect:()=>{ return {labor:-1, time:-1, trust:+1, card:EVENT_CARD_TEMPLATES[14]}; }},
+    {option:'そのまま利用', effect:()=>{ return {trust:-3}; }}
+  ]},
+  // ===== 保護法・政策 =====
+  {id:'law', title:'情報セキュリティ管理法', text:'セキュリティ管理法が施行された', tag: 'society', choices:[
+    {option:'法対応の仕組み導入', effect:()=>{ return {money:-1, labor:-1, time:-2, trust:+2, card:EVENT_CARD_TEMPLATES[15]}; }}
+    {option:'導入見送り', effect:()=>{ return {trust:-1}; }}
+  ]},
+  {id:'gdpr', title:'GDPRの正式発効', text:'EUで個人データ保護法が施行！', tag: 'society', choices:[
+    {option:'GDPR準拠体制を導入', effect:()=>{ return {money:-2, labor:-1, time:-2, trust:+3, card:EVENT_CARD_TEMPLATES[16]}; }},
+    {option:'導入見送り', effect:()=>{ return {trust:-2}; }}
+  ]},
+  {id:'taiwan_policy', title:'資安即国安', text:'情報セキュリティが国安政策に！', tag: 'society', choices:[
+    {option:'政府方針に従う', effect:()=>{ return {labor:-1, time:-2, trust:+2, card:EVENT_CARD_TEMPLATES[17]}; }},
+    {option:'導入見送り', effect:()=>{ return {}; }}
+  ]},
+  {id:'gov_grant', title:'政府補助金獲得', text:'政府のサイバーセキュリティ補助金を獲得！', tag: 'society', choices:[
+    {option:'セキュリティ強化に投資', effect:()=>{ return {money:+2, trust:+1}; }}
+  ]},
+
+  // ===== コンテスト =====
+  {id:'contest_app', title:'アプリケーション保護コンテスト', text:'アプリ防御大会に参加！', tag: 'contest', choices:[
+    {option:'全力参加', effect:()=>{ return {labor:-2, time:-2, trust:+3, card:EVENT_CARD_TEMPLATES[18]}; }},
+    {option:'参加する', effect:()=>{ return {labor:-1, time:-1, trust:+1, card:EVENT_CARD_TEMPLATES[19]}; }},
+    {option:'見送り', effect:()=>{ return {trust:-1}; }}
+  ]},
+  {id:'contest_device', title:'デバイス保護コンテスト', text:'デバイス防御大会に参加！', tag: 'contest', choices:[
+    {option:'全力参加', effect:()=>{ return {labor:-2, time:-2, trust:+3, card:EVENT_CARD_TEMPLATES[20]}; }},
+    {option:'参加する', effect:()=>{ return {labor:-1, time:-1, trust:+1, card:EVENT_CARD_TEMPLATES[21]}; }},
+    {option:'見送り', effect:()=>{ return {trust:-1}; }}
+  ]},
+  {id:'contest_data', title:'データ保護コンテスト', text:'データ保護大会に参加！', tag: 'contest', choices:[
+    {option:'全力参加', effect:()=>{ return {labor:-2, time:-2, trust:+3, card:EVENT_CARD_TEMPLATES[22]}; }},
+    {option:'参加する', effect:()=>{ return {labor:-1, time:-1, trust:+1, card:EVENT_CARD_TEMPLATES[23]}; }},
+    {option:'見送り', effect:()=>{ return {trust:-1}; }}
+  ]},
+  {id:'talent_award', title:'セキュリティ人材賞', text:'従業員が業界の人材賞を受賞！', tag: 'contest', choices:[
+    {option:'祝福し，士気高揚', effect:()=>{ return {labor:+1, trust:+2}; }},
+    {option:'ニュースで広報', effect:()=>{ return {money:+1}; }}
+  ]},
+  {id:'award_cert', title:'業界表彰', text:'優れたセキュリティ運用で表彰された！', tag: 'contest', choices:[
+    {option:'祝福し，士気高揚', effect:()=>{ return {labor:+1}; }},
+    {option:'ニュースで広報', effect:()=>{ return {trust:+3}; }},
+  ]},
+
+  // ===== 脆弱性の発生 =====
+  {id:'meltdown', title:'Meltdown脆弱性発生', text:'CPU設計欠陥による脆弱性！', tag: 'vuln', choices:[
+    {option:'緊急修正', effect:()=>{ return {labor:-3, time:-1, trust:-1, card:EVENT_CARD_TEMPLATES[24]}; }},
+    {option:'後日修正', effect:()=>{ return {labor:-1, time:-2, trust:-3, card:EVENT_CARD_TEMPLATES[25]}; }}
+    //{option:'パッチを適用', effect:()=>{ return {labor:-1, time:-1, trust:-1}; }}
+  ]},
+  {id:'eternalblue', title:'EternalBlue脆弱性発生', text:'SMBサービスの脆弱性！', tag: 'vuln', choices:[
+    {option:'緊急修正', effect:()=>{ return {labor:-3, time:-1, trust:-1, card:EVENT_CARD_TEMPLATES[26]}; }},
+    {option:'後日修正', effect:()=>{ return {labor:-1, time:-2, trust:-3, card:EVENT_CARD_TEMPLATES[27]}; }}
+    //{option:'システム更新', effect:()=>{ return {labor:-1, trust:-1}; }}
+  ]},
+  {id:'shellshock', title:'ShellShock脆弱性発生', text:'Bashに深刻な脆弱性！', tag: 'vuln', choices:[
+    {option:'緊急修正', effect:()=>{ return {labor:-3, time:-1, trust:-1, card:EVENT_CARD_TEMPLATES[28]}; }},
+    {option:'後日修正', effect:()=>{ return {labor:-1, time:-2, trust:-3, card:EVENT_CARD_TEMPLATES[29]}; }}
+    //{option:'全サーバ修正', effect:()=>{ return {labor:-2, time:-2, trust:-2}; }}
+  ]},
+  {id:'spectre', title:'Spectre脆弱性発生', text:'投機的実行欠陥によりメモリ漏洩！', tag: 'vuln', choices:[
+    {option:'緊急修正', effect:()=>{ return {labor:-3, time:-1, trust:-1, card:EVENT_CARD_TEMPLATES[30]}; }},
+    {option:'後日修正', effect:()=>{ return {labor:-1, time:-2, trust:-3, card:EVENT_CARD_TEMPLATES[31]}; }}
+    //{option:'暫定緩和策を導入', effect:()=>{ return {time:-1, trust:-1}; }}
+  ]},
+  {id:'heartbleed', title:'HeartBleed脆弱性発生', text:'OpenSSLのバグにより情報漏洩！', tag: 'vuln', choices:[
+    {option:'緊急修正', effect:()=>{ return {labor:-3, time:-1, trust:-1, card:EVENT_CARD_TEMPLATES[32]}; }},
+    {option:'後日修正', effect:()=>{ return {labor:-1, time:-2, trust:-3, card:EVENT_CARD_TEMPLATES[33]}; }}
+    //{option:'緊急修正', effect:()=>{ return {labor:-1, trust:-2}; }}
+  ]},
+  {id:'zerologon', title:'Zerologon脆弱性発生', text:'認証バイパスの深刻な脆弱性！', tag: 'vuln', choices:[
+    {option:'緊急修正', effect:()=>{ return {labor:-3, time:-1, trust:-1, card:EVENT_CARD_TEMPLATES[34]}; }},
+    {option:'後日修正', effect:()=>{ return {labor:-1, time:-2, trust:-3, card:EVENT_CARD_TEMPLATES[35]}; }}
+    //{option:'即座に修正', effect:()=>{ return {labor:-2, trust:-2}; }}
+  ]},
+];
+
 // Relic templates
 const RELIC_TEMPLATES = [
   {id:'inc_budget', name:'予算増額', desc:'予算の量を追加', effect:()=>{RUN.budget += 10;}},
   //{id:'team_hire', name:'臨時要員', desc:'労働力最大+1', effect:(player)=>{player.maxEnergy.labor++; player.energy.labor++;}},
   {id:'team_hire', name:'臨時要員', desc:'労働力最大+1', effect:()=>{RUN.player.maxEnergy.labor++; RUN.player.energy.labor++;}},
   {id:'automation', name:'自動化ツール', desc:'次回業務時,適用待ちの効果を\n1t経過した状態で開始する', effect:()=>{}},
-  {id:'network_expert', name:'ネットワーク専門家', desc:'networkシナジーカードの防御効果向上', effect:null},
+  //{id:'network_expert', name:'ネットワーク専門家', desc:'networkシナジーカードの防御効果向上', effect:null},
 ];
 
 /* ---------- Game State (persistent across scenes during one run) ---------- */
@@ -117,6 +337,8 @@ class RunState {
     this.player = {
       maxHp: 100,
       hp: 100,
+      maxHiddenHp: 10,
+      hiddenHp: 10,
       defense: 0,
       gold: 10,
       drawcards: 5,
@@ -179,8 +401,8 @@ class RunState {
 
   showBtn(scene, x, y, text, color){
     const Btn = scene.add.rectangle(x,y,200,40,color).setInteractive();
-    scene.add.text(x,y,text, {fontSize:16}).setOrigin(0.5);
-    return Btn;
+    const Txt = scene.add.text(x,y,text, {fontSize:16}).setOrigin(0.5);
+    return {btn: Btn, txt: Txt};
   }
   showSomething(scene, text){
     const modal = scene.add.rectangle(600,360,700,420,0x000000,0.8).setDepth(10);
@@ -199,7 +421,7 @@ class RunState {
   showDeckViewBtn(scene, x=1100, y=20){
     //const Btn = scene.add.rectangle(x,y,200,40,0x2dcc70).setInteractive();
     //scene.add.text(x,y,'デッキを見る', {fontSize:16}).setOrigin(0.5);
-    const Btn = this.showBtn(scene, x, y, 'デッキを見る', 0x2dcc70);
+    const Btn = this.showBtn(scene, x, y, 'デッキを見る', 0x2dcc70).btn;
     //Btn.on('pointerdown', ()=> this.showDeck(scene));
     Btn.on('pointerdown', ()=> this.showSomething(scene, `デッキ:\n${this.player.deck.map(c=>c.name).join('\n')}\n\n所持レリック:\n${this.player.relics.map(r=>r.name).join(', ')||'なし'}`));
   }
@@ -215,7 +437,7 @@ class RunState {
   showDiscardpileViewBtn(scene, x=100, y=700){
     //const Btn = scene.add.rectangle(x,y,200,40,0xff0000).setInteractive();
     //scene.add.text(x,y,'捨て札を見る', {fontSize:16}).setOrigin(0.5);
-    const Btn = this.showBtn(scene, x, y, '捨て札を見る', 0xff0000);
+    const Btn = this.showBtn(scene, x, y, '捨て札を見る', 0xff0000).btn;
     Btn.on('pointerdown', ()=> this.showSomething(scene, `捨て札:\n${this.player.discard.map(c=>c.name).join('\n')}\n`));
     /*
     Btn.on('pointerdown', ()=> {
@@ -230,7 +452,7 @@ class RunState {
   showDrawpileViewBtn(scene, x=1100, y=700){
     //const Btn = scene.add.rectangle(x,y,200,40,0x0070ff).setInteractive();
     //scene.add.text(x,y,'山札を見る', {fontSize:16}).setOrigin(0.5);
-    const Btn = this.showBtn(scene, x, y, '山札を見る', 0x0070ff);
+    const Btn = this.showBtn(scene, x, y, '山札を見る', 0x0070ff).btn;
     Btn.on('pointerdown', ()=> this.showSomething(scene, `山札:\n${this.player.drawPile.map(c=>c.name).join('\n')}\n`));
     /*
     Btn.on('pointerdown', ()=> {
@@ -245,11 +467,11 @@ class RunState {
   showEffectBtn(scene, x=1100, y=100){
     //const Btn = scene.add.rectangle(x,y,200,40,0xffff00).setInteractive();
     //scene.add.text(x,y,'かかっている効果', {fontSize:16, color: "#88f"}).setOrigin(0.5);
-    const Btn = this.showBtn(scene, x, y, 'かかっている効果', 0x66ff00);
+    const Btn = this.showBtn(scene, x, y, 'かかっている効果', 0x66ff00).btn;
     Btn.on('pointerdown', ()=> this.showSomething(scene, `効果:\n${this.player.applyEffect.map((c)=>`${c.card.name} × ${c.stack}`).join('\n')}\n`));
   }
   showWaitEffectBtn(scene, x=1100, y=160){
-    const Btn = this.showBtn(scene, x, y, '適用待ちの効果', 0xffcc00);
+    const Btn = this.showBtn(scene, x, y, '適用待ちの効果', 0xffcc00).btn;
     Btn.on('pointerdown', ()=> this.showSomething(scene, `適用待ちの効果:\n${this.player.applyEffectWaiting.map((c)=>`${c.card.name} : 残り${c.leftTime}ターン, かかってる人手: ${c.card.cost.labor}`).join('\n')}\n`));
   }
 
@@ -508,6 +730,18 @@ class BattleScene extends Phaser.Scene {
     this.turn='player';
     this.turnText.setText(`Turn ${++this.countTurn}`);
     this.messageText.setText('あなたのターン');
+    if(this.countTurn != 1){
+      if(this.incidentFlag){
+        this.happenIncident();
+      }else{
+        this.eventFlag = Util.randChoice([false,false,false,'c','a']);
+        if(eventFlag == 'a'){
+          this.happenAccident();
+        }else if (eventFlag == 'c'){
+          this.happenCustomerOrder();
+        }
+      }
+    }
     // reset player defense to 0 per spec
     //RUN.player.defense = 0;
     // recover energy to max
@@ -517,7 +751,7 @@ class BattleScene extends Phaser.Scene {
     */
     // draw 5 cards
     this.hand = [];
-    for(let i=0;i<RUN.player.drawcards;i++) this.drawCard();
+    for(let i=this.hand.length;i<RUN.player.drawcards;i++) this.drawCard();
     this.renderHand();
     this.updateInfo();
     this.renderApplyWaits();
@@ -595,7 +829,14 @@ class BattleScene extends Phaser.Scene {
     this.delayApplyEffects();
     this.renderApplyWaits();
     // discard all hand
-    for(const c of this.hand) RUN.player.discard.push(c);
+    for(const c of this.hand){
+      if(c.must){
+        this.messageText.setText('対応すべき事柄が対処されなかった\n信頼損失（-20）');
+      }
+      if(c.instant != true){
+        RUN.player.discard.push(c);
+      }
+    } 
     this.hand = [];
     this.renderHand();
     this.updateInfo();
@@ -618,7 +859,7 @@ class BattleScene extends Phaser.Scene {
       } else {
         const over = dmg - RUN.player.defense;
         RUN.player.defense = 0;
-        RUN.player.hp -= over;
+        RUN.player.hiddenHp -= over;
       }
     }
     // simulate enemy taking any DOT? (simplified) -> we'll deduct small decay
@@ -641,6 +882,10 @@ class BattleScene extends Phaser.Scene {
     if(RUN.player.hp <= 0){
       this.scene.start('GameOverScene');
       return;
+    }
+    if(RUN.player.hiddenHp <= 0){
+      this.incidentFlag = true;
+      RUN.player.hiddenHp += RUN.player.maxHiddenHp;
     }
     // after enemy turn, show updated info, delay and resume player
     this.enemyInfo.setText(this.formatEnemy());
@@ -690,7 +935,15 @@ class BattleScene extends Phaser.Scene {
     for(let i=0; i<RUN.player.applyEffectWaiting.length; i++){
       const duel = RUN.player.applyEffectWaiting[i];
       if(duel.leftTime <= 0){
-        this.applyEffect(duel.card);
+        if(dual.card.must != true){
+          this.applyEffect(duel.card);
+        }else if(dual.card.id == 'incident'){
+
+        }else if(dual.card.id == 'accident'){
+
+        }else if(dual.card.id == 'customer'){
+          
+        }
         RUN.player.energy += duel.card.cost.labor;
         RUN.player.applyEffectWaiting.splice(i, 1);
         i--;
@@ -801,6 +1054,20 @@ class BattleScene extends Phaser.Scene {
       //box.setInteractive();
       //box.on('pointerdown', ()=> this.playCard(card, i));
     }
+  }
+  happenIncident(){
+    this.messageText.setText('インシデントが発生！社会的信頼が低下(HP-40)\n対応が求められる');
+    RUN.player.hp -= 40;
+    RUN.player.hand.push(JSON.parse(JSON.stringify(EVENT_CARD_TEMPLATES[0])));
+  }
+  happenAccident(){
+    this.messageText.setText('障害が発生！社会的信頼が低下(HP-20)\n対応が求められる');
+    RUN.player.hp -= 20;
+    RUN.player.hand.push(JSON.parse(JSON.stringify(EVENT_CARD_TEMPLATES[1])));
+  }
+  happenCustomerOrder(){
+    this.messageText.setText('顧客からのオーダーが発生\n対応が求められる');
+    RUN.player.hand.push(JSON.parse(JSON.stringify(EVENT_CARD_TEMPLATES[3])));    
   }
 }
 
@@ -925,7 +1192,7 @@ class RestScene extends Phaser.Scene {
     });
 
     const upgradeBtn = this.add.rectangle(600,320,240,100,0x7799ff).setInteractive();
-    this.add.text(600,320,'強化: デッキの施策強化', {fontSize:18}).setOrigin(0.5);
+    this.add.text(600,320,'改良: デッキの施策強化', {fontSize:18}).setOrigin(0.5);
     upgradeBtn.on('pointerdown', ()=> {
       if(RUN.player.deck.length===0) { this.scene.start('MapScene'); return; }
       const toUpgrade = Util.randChoice(RUN.player.deck);
@@ -934,7 +1201,7 @@ class RestScene extends Phaser.Scene {
       if(toUpgrade.heal) toUpgrade.heal = Math.ceil(toUpgrade.heal*1.5);
       if(toUpgrade.damageToVuln) toUpgrade.damageToVuln = Math.ceil(toUpgrade.damageToVuln*1.5);
       toUpgrade.name = toUpgrade.name+"+";
-      this.add.text(600,430,`強化： ${toUpgrade.name} を得た`, {fontSize:14});
+      this.add.text(600,430,`改良： ${toUpgrade.name} を得た`, {fontSize:14});
       this.time.delayedCall(1000, ()=> this.endRestScene());
     });
 
@@ -1060,15 +1327,16 @@ class EventScene extends Phaser.Scene {
     RUN.showBtns(this,true,false,false,true,true);
     //RUN.showDeckViewBtn(this);
     this.add.text(600,80,'イベント', {fontSize:28}).setOrigin(0.5);
-    const events = [
-      {id:'budget_cut', text:'企業がコスト削減を発表。金銭エナジー減少', effect:()=>{ RUN.player.gold = Math.max(1, RUN.player.gold-1);} },
-      {id:'investment', text:'投資が入り、金銭を獲得', effect:()=>{ RUN.player.gold += 20; }},
-      {id:'insider', text:'内部不正を発見！人手が減少', effect:()=>{ RUN.player.maxEnergy--; RUN.player.energy--; }},
-      {id:'policy', text:'ポリシー刷新で一時的バフ', effect:()=>{ RUN.player.defense += 6; }},
-      {id:'zero_day_found', text:'ゼロデイを発見！だが調査に時間が必要', effect:()=>{ RUN.player.energy -= 1; RUN.player.applyEffectWaiting.push({leftTime: 3, card: { id:'event', name:'Duel Zero Day Vulnerability', cost:{money:1,labor:1,time:0}, text:'ゼロデイ脆弱性対応', synergy:'vulnerability' }}); }}
-    ];
-    const ev = Util.randChoice(events);
-    this.add.text(600,140,ev.text, {fontSize:18}).setOrigin(0.5);
+    let ev;
+    //const ev = Util.randChoice(events);
+    if(debugMode){
+      //ev = Util.randChoice(EVENT_TEMPLATES);
+      ev = EVENT_TEMPLATES[debugIndex++];
+    }else{
+      ev = Util.randChoice(EVENT_TEMPLATES);
+    }
+    this.add.text(600,140,ev.title, {fontSize:20}).setOrigin(0.5);
+    this.add.text(600,160,ev.text, {fontSize:18}).setOrigin(0.5);
     /*
     if(ev.id==='insider'){
       // start battle immediately with an enemy
@@ -1084,11 +1352,59 @@ class EventScene extends Phaser.Scene {
       //this.time.delayedCall(1200, ()=> this.scene.start('MapScene'));
     }
     */
-    ev.effect();
+    const choiceBtns = [];
+    let startY = 300;
+    //const choice = this.add.text(600,startY+20,`${ev.choices.length}`, {fontSize:18}).setOrigin(0.5);
+    //RUN.showBtn(this, 600, startY+80, "a", 0xffffff);
+    for(let i=0; i<ev.choices.length; i++){
+      //const choiceBlk = this.add.rectangle();
+      //const choice = this.add.text(600,startY+i*20,ev.choices[i].option, {fontSize:18}).setOrigin(0.5);
+      const Btn = RUN.showBtn(this, 600, startY+i*100, ev.choices[i].option, 0x666666);
+      //const Btn = RUN.showBtn(this, 600, startY+i*20, "a", 0xffffff);
+      Btn.btn.on('pointerdown', ()=> { this.applyEvent(ev.choices[i]); this.destroyBtns(choiceBtns); this.endScene(); });
+      choiceBtns.push(Btn);
+    }
+    //close.on('pointerdown', ()=>{ modal.destroy(); close.destroy(); closeText.destroy(); Txt.destroy(); });
+  }
+  applyEvent(ev, evTitle){
+    const ret = ev.choices[i].effect();
+    if(ret.card != null){
+      RUN.player.applyEffectWaiting.push({leftTime: ret.card.cost.time, card: ret.card});
+    }
+    if(ret.labor != null){
+      RUN.player.energy += ret.labor;
+      if(ret.time == null){
+        RUN.player.maxEnergy += ret.labor;
+      }
+    }
+    if(ret.money != null){
+      RUN.player.gold += ret.money*5;
+    }
+    if(ret.budget != null){
+      RUN.budget += ret.budget*5;
+    }
+    if(ret.trust != null){
+      RUN.player.hp +=ret.trust*5;
+    }
+  }
+  destroyBtns(Btns){
+    for(let i=0; i<Btns.length; i++){
+      Btns[i].btn.destroy();
+      Btns[i].txt.destroy();
+    }
+  }
+  endScene(){    
     const skip = this.add.rectangle(600,560,160,40,0x666666).setInteractive();
     this.add.text(600,560,'次へ', {fontSize:16}).setOrigin(0.5);
-    skip.on('pointerdown', ()=> this.scene.start('ShopScene'));
-    //this.time.delayedCall(1200, ()=> this.scene.start('MapScene'));
+    if(debugMode){
+      if(debugIndex == EVENT_TEMPLATES.length){
+        skip.on('pointerdown', ()=> this.scene.start('ShopScene'));
+      }else{
+        skip.on('pointerdown', ()=> this.scene.start('EventScene'));
+      }
+    }else{
+      skip.on('pointerdown', ()=> this.scene.start('ShopScene'));
+    }
   }
 }
 
