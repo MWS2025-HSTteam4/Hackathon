@@ -29,7 +29,7 @@ const Util = {
   shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]] } return arr; },
   clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 };
-const debugMode = true;
+const debugMode = false;
 let debugIndex = 0;
 //*
 function startBattle(Scene){
@@ -364,7 +364,7 @@ const EVENT_TEMPLATES = [
 
 // Relic templates
 const RELIC_TEMPLATES = [
-  {id:'inc_budget', name:'予算増額', desc:'予算の量を追加', effect:()=>{RUN.budget += 10;}},
+  {id:'inc_budget', name:'予算増額', desc:'予算の量を追加', effect:()=>{RUN.budget += 5;}},
   //{id:'team_hire', name:'臨時要員', desc:'労働力最大+1', effect:(player)=>{player.maxEnergy.labor++; player.energy.labor++;}},
   {id:'team_hire', name:'臨時要員', desc:'労働力最大+1', effect:()=>{RUN.player.maxEnergy.labor++; RUN.player.energy.labor++;}},
   {id:'automation', name:'自動化ツール', desc:'次回業務時,適用待ちの効果を\n1t経過した状態で開始する', effect:()=>{RUN.automationFlag = true;}},
@@ -705,7 +705,7 @@ class MapScene extends Phaser.Scene {
       }
     }
     // legend
-    this.add.text(900,50,'伝説: 敵/エリート/ボス/休憩/宝箱/ショップ/イベント', {fontSize:12});
+    if(debugMode) this.add.text(900,50,'伝説: 敵/エリート/ボス/休憩/宝箱/ショップ/イベント', {fontSize:12});
     this.add.text(900,80,'青が選択済', {fontSize:12}).setColor('#88f');
     // show remaining count
     const remaining = RUN.map.filter(n=>!n.chosen).length;
@@ -789,6 +789,16 @@ class BattleScene extends Phaser.Scene {
     this.turn='player';
     this.turnText.setText(`Turn ${++this.countTurn}`);
     this.messageText.setText('あなたのターン');
+    // reset player defense to 0 per spec
+    //RUN.player.defense = 0;
+    // recover energy to max
+    /*
+    // delay apply effect
+    this.delayApplyEffects();
+    */
+    // draw 5 cards
+    this.hand = [];
+
     if(this.countTurn != 1){
       if(this.incidentFlag){
         this.happenIncident();
@@ -801,15 +811,7 @@ class BattleScene extends Phaser.Scene {
         }
       }
     }
-    // reset player defense to 0 per spec
-    //RUN.player.defense = 0;
-    // recover energy to max
-    /*
-    // delay apply effect
-    this.delayApplyEffects();
-    */
-    // draw 5 cards
-    this.hand = [];
+
     for(let i=this.hand.length;i<RUN.player.drawcards;i++) this.drawCard();
     this.renderHand();
     this.updateInfo();
@@ -890,7 +892,7 @@ class BattleScene extends Phaser.Scene {
     // discard all hand
     for(const c of this.hand){
       if(c.must){
-        this.messageText.setText('対応すべき事柄が対処されなかった\n信頼損失（-20）');
+        this.messageText.setText('対応すべき事柄が対処されなかった.信頼損失（HP-20）');
       }
       if(c.instant != true){
         RUN.player.discard.push(c);
@@ -1115,18 +1117,21 @@ class BattleScene extends Phaser.Scene {
     }
   }
   happenIncident(){
-    this.messageText.setText('インシデントが発生！社会的信頼が低下(HP-40)\n対応が求められる');
+    this.messageText.setText('インシデントが発生！社会的信頼が低下(HP-40).対応が求められる');
     RUN.player.hp -= 40;
-    RUN.player.hand.push(JSON.parse(JSON.stringify(EVENT_CARD_TEMPLATES[0])));
+    //RUN.player.hand.push(JSON.parse(JSON.stringify(EVENT_CARD_TEMPLATES[0])));
+    this.hand.push(JSON.parse(JSON.stringify(EVENT_CARD_TEMPLATES[0])));
   }
   happenAccident(){
-    this.messageText.setText('障害が発生！社会的信頼が低下(HP-20)\n対応が求められる');
+    this.messageText.setText('障害が発生！社会的信頼が低下(HP-20).対応が求められる');
     RUN.player.hp -= 20;
-    RUN.player.hand.push(JSON.parse(JSON.stringify(EVENT_CARD_TEMPLATES[1])));
+    //RUN.player.hand.push(JSON.parse(JSON.stringify(EVENT_CARD_TEMPLATES[1])));
+    this.hand.push(JSON.parse(JSON.stringify(EVENT_CARD_TEMPLATES[1])));
   }
   happenCustomerOrder(){
-    this.messageText.setText('顧客からのオーダーが発生\n対応が求められる');
-    RUN.player.hand.push(JSON.parse(JSON.stringify(EVENT_CARD_TEMPLATES[3])));    
+    this.messageText.setText('顧客からのオーダーが発生.対応が求められる');
+    //RUN.player.hand.push(JSON.parse(JSON.stringify(EVENT_CARD_TEMPLATES[3])));    
+    this.hand.push(JSON.parse(JSON.stringify(EVENT_CARD_TEMPLATES[3])));    
   }
 }
 
