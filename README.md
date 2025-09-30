@@ -106,6 +106,10 @@ githun上でpull requestを作成
 マージする
 フェッチ系はまだわかってない
 ```
+
+## Github操作
+* 権限付与のための参考資料
+* https://docs.github.com/ja/repositories/managing-your-repositorys-settings-and-features/managing-repository-settings/managing-teams-and-people-with-access-to-your-repository
 </details>
 
 
