@@ -113,22 +113,22 @@ githun上でpull requestを作成
 
 
 # 他人の操作の適用
-* main:   --状態A--変更B
-* branch: --状態A--変更C
+* `main:   --状態A--変更B`
+* `branch: --状態A--変更C`
 * `git checkout branch` : branchへの移動(元からいる場合は不要)
 * `git fetch origin` : 最新のmainを取得
 ## merge
 * `git merge origin/main` : mainをマージ
-* main:   --状態A--変更B
-* branch: --状態A--変更C--変更M(B+C)
+* `main:   --状態A--変更B`
+* `branch: --状態A--変更C--変更M(B+C)`
 * 変更BとCを統合したマージコミットが作られる
 * これをコミットしてマージすることでmainにも適用できる
 * 履歴が複雑
 * コミットを書き換えない：チーム作業ではこっちの方が安全
 ## rebase
 * `git rebase origin/main` : rebaseする
-* main:   --状態A--変更B
-* branch:        --変更B--変更C
+* `main:   --状態A--変更B`
+* `branch:        --変更B--変更C`
 * branchの変更を一度取り外して，最新のmainの後ろに付け直す
 * 履歴がきれい
 * コミットを書き換える：個人作業,push前なら便利
