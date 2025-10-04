@@ -10,6 +10,12 @@
 ![Game Screen 2](./assets/fig2.png)
 ![Game Screen 3](./assets/fig3.png)
 
+## Play the Game
+
+You can play the game directly in your browser from the following link:
+
+[**=> Play MWS Cup 2025 Hackathon: Security Card Defense**](https://mws2025-hstteam4.github.io/Hackathon/)
+
 ---
 
 ## 1. Background and Issues
